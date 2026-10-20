@@ -831,7 +831,7 @@ describe("ScheduleService", () => {
     expect(await workspaceRegistry.list()).toEqual([]);
   });
 
-  test("local runs keep one active workspace per run by default", async () => {
+  test("archiveOnFinish=false local runs create one active workspace per run", async () => {
     const {
       workspaceRegistry,
       createDirectoryWorkspace: createScheduleDirectoryWorkspace,
@@ -865,6 +865,7 @@ describe("ScheduleService", () => {
           provider: "claude",
           model: "test-model",
           cwd: tempDir,
+          archiveOnFinish: false,
           isolation: "local",
         },
       },
@@ -939,7 +940,6 @@ describe("ScheduleService", () => {
           provider: "claude",
           model: "test-model",
           cwd: tempDir,
-          archiveOnFinish: true,
           isolation: "local",
         },
       },
@@ -1388,10 +1388,7 @@ describe("ScheduleService", () => {
     const created = await service.create({
       prompt: "fail and fail cleanup",
       cadence: { type: "every", everyMs: 60_000 },
-      target: {
-        type: "new-agent",
-        config: { provider: "claude", cwd: tempDir, archiveOnFinish: true },
-      },
+      target: { type: "new-agent", config: { provider: "claude", cwd: tempDir } },
       maxRuns: 1,
     });
     await service.tick();
@@ -1761,7 +1758,6 @@ describe("ScheduleService", () => {
           provider: "claude",
           model: "test-model",
           cwd: tempDir,
-          archiveOnFinish: true,
         },
       },
       maxRuns: 1,
@@ -1873,7 +1869,6 @@ describe("ScheduleService", () => {
           provider: "claude",
           model: "test-model",
           cwd: tempDir,
-          archiveOnFinish: true,
         },
       },
       maxRuns: 1,
@@ -1945,7 +1940,7 @@ describe("ScheduleService", () => {
     expect(agentId).toBeTruthy();
     const agent = await agentStorage.get(agentId!);
     expect(agent?.lastModeId).toBe("bypassPermissions");
-    expect(agent?.archivedAt ?? null).toBeNull();
+    expect(agent?.archivedAt).toBeTruthy();
   });
 
   test("defaults OpenCode new-agent schedules to build plus auto accept", async () => {
@@ -2221,7 +2216,7 @@ describe("ScheduleService", () => {
       cadence: { type: "every", everyMs: 60_000 },
       target: {
         type: "new-agent",
-        config: { provider: "claude", cwd: tempDir, archiveOnFinish: true },
+        config: { provider: "claude", cwd: tempDir },
       },
       runOnCreate: false,
     });

@@ -112,7 +112,7 @@ async function expectThinkingOptionsFit(page: Page): Promise<void> {
 test.describe("New workspace Codex mode preferences", () => {
   test.describe.configure({ timeout: 240_000 });
 
-  test("keeps Full Access as the global Codex mode after the workspace draft auto-submit handoff", async ({
+  test("does not save a draft permission choice before agent startup succeeds", async ({
     page,
     startup,
   }) => {
@@ -137,22 +137,43 @@ test.describe("New workspace Codex mode preferences", () => {
         page.getByRole("button", { name: "Select agent mode (Full access)" }),
       ).toBeVisible();
 
-      await submitNewWorkspacePrompt(page, "Keep Codex full access selected globally.");
+      await submitNewWorkspacePrompt(
+        page,
+        "Keep this project permission choice only after successful creation.",
+      );
       const createAgentRequest = await createAgentRecorder.waitForRequest();
 
       await expect(page).toHaveURL(/\/workspace\//);
       await expect(
-        page.getByText("Keep Codex full access selected globally.", { exact: true }).first(),
+        page
+          .getByText("Keep this project permission choice only after successful creation.", {
+            exact: true,
+          })
+          .first(),
       ).toBeVisible();
       expect(createAgentRequest.config).toMatchObject({
         provider: "codex",
         modeId: "full-access",
       });
-      await expect
-        .poll(() => readCodexModePreference(page), { timeout: 10_000 })
-        .toBe("full-access");
+      await expect.poll(() => readCodexModePreference(page), { timeout: 10_000 }).toBe("auto");
+      expect(
+        await page.evaluate(
+          (key) =>
+            JSON.parse(localStorage.getItem("@paseo:project-workspace-defaults") ?? "{}")[key] ??
+            null,
+          seeded.projectKey,
+        ),
+      ).toBeNull();
       await startup.fail();
       await expect(page.getByText(/Creation startup failed for test/).first()).toBeVisible();
+      expect(
+        await page.evaluate(
+          (key) =>
+            JSON.parse(localStorage.getItem("@paseo:project-workspace-defaults") ?? "{}")[key] ??
+            null,
+          seeded.projectKey,
+        ),
+      ).toBeNull();
     } finally {
       await seeded.cleanup();
     }

@@ -1269,3 +1269,75 @@ it("owns input readiness, reopening and user edits in the reducer", () => {
   state = resolveAgentForm(state, { ...inputs, isPreferencesLoading: false, hasSnapshot: true });
   expect(state.form).toMatchObject({ provider: "codex", model: "astra" });
 });
+
+describe("project scoped form resolution", () => {
+  const input = {
+    type: "INPUTS_CHANGED" as const,
+    scopeKey: "project-a",
+    serverId: "host-a",
+    isVisible: true,
+    isCreateFlow: true,
+    isPreferencesLoading: false,
+    hasSnapshot: true,
+    initialValues: undefined,
+    preferences: { provider: "codex", providerPreferences: { codex: { model: "astra" } } },
+    allowedProviderMap: new Map(),
+    providerModelsByProvider: new Map(),
+  };
+  it("restores another project's whole configuration without retaining manual fields", () => {
+    let state = resolveAgentForm(makeState(), input);
+    state = resolveAgentForm(state, { type: "SET_MODE_FROM_USER", modeId: "full-access" });
+    state = resolveAgentForm(state, {
+      ...input,
+      scopeKey: "project-b",
+      preferences: { provider: "claude", providerPreferences: { claude: { model: "opus" } } },
+    });
+    expect(state.form).toEqual({
+      provider: "claude",
+      model: "opus",
+      modeId: "",
+      thinkingOptionId: "",
+    });
+  });
+  it("keeps manual edits through host changes, background discovery and late initial inputs", () => {
+    let state = resolveAgentForm(makeState(), input);
+    state = resolveAgentForm(state, {
+      type: "SET_MODEL_FROM_USER",
+      modelId: "manual",
+      availableModels: null,
+      providerPrefs: undefined,
+    });
+    state = resolveAgentForm(state, { ...input, serverId: "host-b" });
+    expect(state.form.model).toBe("manual");
+    state = resolveAgentForm(state, {
+      ...input,
+      serverId: "host-b",
+      initialValues: { model: "late" },
+    });
+    expect(state.form.model).toBe("manual");
+    expect(state.userModified.model).toBe(true);
+  });
+  it("retains an unavailable remembered thinking level instead of silently using a default", () => {
+    const state = resolveAgentForm(makeState(), {
+      ...input,
+      preferences: {
+        provider: "codex",
+        providerPreferences: {
+          codex: {
+            model: CODEX_MODELS[0].id,
+            thinkingByModel: { [CODEX_MODELS[0].id]: "removed" },
+          },
+        },
+      },
+      allowedProviderMap: codexProviderMap,
+      providerModelsByProvider: new Map([["codex", CODEX_MODELS]]),
+    });
+    expect(state.form.thinkingOptionId).toBe("removed");
+  });
+
+  it("applies late explicit defaults to untouched fields", () => {
+    let state = resolveAgentForm(makeState(), input);
+    state = resolveAgentForm(state, { ...input, initialValues: { model: "late" } });
+    expect(state.form.model).toBe("late");
+  });
+});

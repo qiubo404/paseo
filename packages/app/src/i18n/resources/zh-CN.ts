@@ -1332,6 +1332,20 @@ export const zhCN: TranslationResources = {
     },
   },
   newWorkspace: {
+    defaults: {
+      modelsLoadFailed: "无法加载主机模型：{{reason}}。请重新选择主机或刷新后重试。",
+      noModels: "该主机暂无可用模型，请检查提供方配置或选择其他主机。",
+      loading: "正在加载工作区配置…",
+      loadFailed: "无法读取项目配置：{{reason}}",
+      saveFailed: "工作区已创建，但项目配置保存失败：{{reason}}",
+      hostUnavailable: "主机 {{value}} 当前不可用，请重新连接或选择主机。",
+      projectUnavailable: "所选主机上没有此项目，请为此项目选择主机。",
+      isolationUnavailable: "已记忆的隔离方式不可用，请重新选择隔离方式。",
+      providerUnavailable: "所选主机上的 {{value}} 不可用，请重新选择模型。",
+      modelUnavailable: "所选主机上的模型 {{value}} 不可用，请重新选择模型。",
+      modeUnavailable: "权限模式 {{value}} 不可用，请重新选择权限模式。",
+      thinkingUnavailable: "思考等级 {{value}} 不可用，请重新选择思考等级。",
+    },
     title: "新建 workspace",
     create: "创建",
     isolation: {

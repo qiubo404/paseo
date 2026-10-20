@@ -186,6 +186,7 @@ export function resolveSelectedModelLabel(input: {
 
   const provider = input.providers.find((entry) => entry.id === selectedProvider);
   if (!provider) {
+    if (input.selectedModel.trim()) return input.selectedModel.trim();
     return input.isLoading
       ? i18n.t("providerSelection.loading")
       : i18n.t("providerSelection.selectModel");

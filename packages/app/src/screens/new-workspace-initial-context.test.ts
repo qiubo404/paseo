@@ -1,10 +1,56 @@
 import { describe, expect, it } from "vitest";
 import type { HostProjectListItem } from "@/projects/host-projects";
 import type { HostRuntimeConnectionStatus } from "@/runtime/host-runtime";
+import { resolveWorkspaceDefaultsIssue } from "./new-workspace/defaults-readiness";
 import {
   resolveNewWorkspaceAutomaticServerId,
   resolveNewWorkspaceInitialServerId,
 } from "./new-workspace-initial-context";
+
+describe("remembered workspace configuration readiness", () => {
+  const input = {
+    hostKnown: true,
+    connected: true,
+    serverId: "local",
+    sourceDirectory: "/project",
+    isolationSupported: true,
+    needsAgent: true,
+    isLoading: false,
+    provider: "codex",
+    model: "removed",
+    mode: "",
+    thinking: "",
+    entries: [{ provider: "codex", enabled: true, status: "ready" as const, models: [] }],
+  };
+  it("requires explicit reselection when the remembered model is missing", () => {
+    expect(resolveWorkspaceDefaultsIssue(input)).toEqual({
+      key: "modelUnavailable",
+      value: "removed",
+    });
+  });
+  it("allows empty and terminal workspaces independently of the saved model", () => {
+    expect(resolveWorkspaceDefaultsIssue({ ...input, needsAgent: false })).toBeNull();
+  });
+  it("does not silently substitute a host when the remembered host was removed", () => {
+    expect(resolveWorkspaceDefaultsIssue({ ...input, hostKnown: false })).toEqual({
+      key: "hostUnavailable",
+      value: "local",
+    });
+  });
+  it("treats pending model discovery as loading", () => {
+    expect(resolveWorkspaceDefaultsIssue({ ...input, isLoading: true })).toEqual({
+      key: "loading",
+    });
+  });
+  it("blocks agent creation when no models are available, while empty workspaces remain possible", () => {
+    expect(resolveWorkspaceDefaultsIssue({ ...input, provider: null, entries: [] })).toEqual({
+      key: "noModels",
+    });
+    expect(
+      resolveWorkspaceDefaultsIssue({ ...input, provider: null, entries: [], needsAgent: false }),
+    ).toBeNull();
+  });
+});
 
 function projectFor(serverId: string, key = "project"): HostProjectListItem {
   return {

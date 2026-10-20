@@ -148,8 +148,18 @@ async function persistProviderPreferences(input: {
 export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFormStateResult {
   const { serverId, initialValues, workingDir, isVisible = true, isCreateFlow = true } = options;
 
-  const { preferences, isLoading: isPreferencesLoading, updatePreferences } = useFormPreferences();
+  const {
+    preferences,
+    isLoading: isPreferencesLoading,
+    updatePreferences,
+    scopeKey,
+  } = useFormPreferences();
   const preferenceOverlayRef = useRef(new OptimisticFormPreferences(preferences));
+  const preferenceScopeRef = useRef(scopeKey);
+  if (preferenceScopeRef.current !== scopeKey) {
+    preferenceScopeRef.current = scopeKey;
+    preferenceOverlayRef.current = new OptimisticFormPreferences(preferences);
+  }
 
   useEffect(() => {
     preferenceOverlayRef.current.reconcile(preferences);
@@ -159,24 +169,28 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
     async (
       updates: Partial<FormPreferences> | ((current: FormPreferences) => FormPreferences),
     ): Promise<FormPreferences> => {
-      const pendingId = preferenceOverlayRef.current.begin(updates);
+      const overlay = preferenceOverlayRef.current;
+      const pendingId = overlay.begin(updates);
       try {
         const persisted = await updatePreferences(updates);
-        preferenceOverlayRef.current.commit(pendingId, persisted);
+        overlay.commit(pendingId, persisted);
         return persisted;
       } catch (error) {
-        preferenceOverlayRef.current.reject(pendingId);
+        overlay.reject(pendingId);
         throw error;
       }
     },
     [updatePreferences],
   );
 
-  const [{ form: formState, userModified, resolution }, dispatch] = useReducer(resolveAgentForm, {
-    form: { provider: null, modeId: "", model: "", thinkingOptionId: "" },
-    userModified: INITIAL_USER_MODIFIED,
-    resolution: INITIAL_AGENT_FORM_RESOLUTION,
-  });
+  const [{ form: formState, userModified, resolution, inputs: formInputs }, dispatch] = useReducer(
+    resolveAgentForm,
+    {
+      form: { provider: null, modeId: "", model: "", thinkingOptionId: "" },
+      userModified: INITIAL_USER_MODIFIED,
+      resolution: INITIAL_AGENT_FORM_RESOLUTION,
+    },
+  );
 
   const {
     entries: snapshotEntries,
@@ -251,12 +265,17 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
   const modeOptions = snapshotSelectedProviderModes;
   const isModelSelectionLoading =
     isConnected &&
-    (resolution.status === "pending" || snapshotIsLoading || selectedProviderIsLoading);
+    (isPreferencesLoading ||
+      formInputs?.scopeKey !== scopeKey ||
+      resolution.status === "pending" ||
+      snapshotIsLoading ||
+      selectedProviderIsLoading);
   const isAllModelsLoading = isModelSelectionLoading;
 
   useEffect(() => {
     dispatch({
       type: "INPUTS_CHANGED",
+      scopeKey,
       serverId,
       isVisible,
       isCreateFlow,
@@ -269,6 +288,7 @@ export function useAgentFormState(options: UseAgentFormStateOptions): UseAgentFo
     });
   }, [
     serverId,
+    scopeKey,
     isVisible,
     isCreateFlow,
     isPreferencesLoading,

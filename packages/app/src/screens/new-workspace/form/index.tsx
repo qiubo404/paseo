@@ -53,6 +53,7 @@ export interface NewWorkspaceFormProps {
     onAddHost: () => void;
   };
   isolation: PickerControl & {
+    visible: boolean;
     effectiveIsolation: Isolation;
     canCreateWorktree: boolean;
     onSelect: (isolation: Isolation) => void;
@@ -76,6 +77,13 @@ export interface NewWorkspaceFormProps {
     profiles: readonly TerminalProfile[];
     disabled: boolean;
   };
+}
+
+function shouldShowHost(host: NewWorkspaceFormProps["host"]) {
+  return (
+    host.allHosts.length > 1 ||
+    !host.allHosts.some((item) => item.serverId === host.selectedServerId)
+  );
 }
 
 function hostOptionTestID(serverId: string): string {
@@ -170,9 +178,9 @@ export function useNewWorkspaceForm(props: NewWorkspaceFormProps): ReactElement 
   const isolationPicker = useIsolationPicker(isolation, isPending);
   const renderRefOption = useRefRenderOption(base.itemById, isPending);
 
-  const showHost = host.allHosts.length > 1;
+  const showHost = shouldShowHost(host);
   const selectedHostLabel =
-    host.allHosts.find((h) => h.serverId === host.selectedServerId)?.label ?? "Host";
+    host.allHosts.find((h) => h.serverId === host.selectedServerId)?.label ?? host.selectedServerId;
   const selectedProject = project.selectedProject;
   const selectedProjectIconUri = selectedProject
     ? (project.iconDataByProjectViewKey.get(selectedProject.viewKey) ?? null)
@@ -243,7 +251,7 @@ export function useNewWorkspaceForm(props: NewWorkspaceFormProps): ReactElement 
       />
     </HostPicker>
   ) : null;
-  const isolationField = isolation.canCreateWorktree ? (
+  const isolationField = isolation.visible ? (
     <FieldTrigger
       ref={isolation.anchorRef}
       variant={variant}

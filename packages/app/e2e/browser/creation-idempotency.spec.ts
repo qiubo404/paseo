@@ -116,6 +116,7 @@ for (const scenario of [
   test(`retrying failed agent initialization preserves its workspace${scenario.suffix}`, async ({
     creation,
     startup,
+    page,
   }) => {
     await creation.openWorkspaceForm("local");
     await creation.submitPrompt("Retry this workspace and agent together.", "Create");
@@ -123,9 +124,25 @@ for (const scenario of [
     await startup.fail();
     await creation.expectStartupFailure();
     await creation.expectOneCreatedWorkspace();
+    expect(
+      await page.evaluate(() =>
+        JSON.parse(localStorage.getItem("@paseo:project-workspace-defaults") ?? "{}"),
+      ),
+    ).toEqual({});
     await scenario.prepare(creation);
     await creation.submitPrompt("Retry this workspace and agent together.");
     await creation.expectAgentCount(1);
+    await expect
+      .poll(() =>
+        page.evaluate(() =>
+          Object.values(
+            JSON.parse(localStorage.getItem("@paseo:project-workspace-defaults") ?? "{}"),
+          ),
+        ),
+      )
+      .toEqual([
+        expect.objectContaining({ preferences: expect.objectContaining({ provider: "mock" }) }),
+      ]);
   });
 }
 

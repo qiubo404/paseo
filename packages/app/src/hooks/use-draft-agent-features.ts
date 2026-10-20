@@ -32,7 +32,8 @@ export function useDraftAgentFeatures(input: {
   );
   const client = useHostRuntimeClient(serverId ?? "");
   const isConnected = useHostRuntimeIsConnected(serverId ?? "");
-  const { preferences, updatePreferences } = useFormPreferences();
+  const { preferences, updatePreferences, scopeKey } = useFormPreferences();
+  const previousScopeRef = useRef(scopeKey);
   const normalizedCwd = cwd?.trim() || "";
   const normalizedProvider = provider ?? null;
   const previousProviderRef = useRef<AgentProvider | null>(normalizedProvider);
@@ -93,6 +94,13 @@ export function useDraftAgentFeatures(input: {
   const features = useMemo(() => {
     return applyFeatureValues(availableFeatures, featureValues);
   }, [availableFeatures, featureValues]);
+
+  useEffect(() => {
+    if (previousScopeRef.current !== scopeKey) {
+      previousScopeRef.current = scopeKey;
+      setLocalFeatureValues({});
+    }
+  }, [scopeKey]);
 
   useEffect(() => {
     const previousProvider = previousProviderRef.current;

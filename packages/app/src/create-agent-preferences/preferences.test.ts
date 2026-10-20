@@ -7,6 +7,135 @@ import {
   parseFormPreferences,
 } from "./preferences";
 import { FakeCreateAgentPreferenceStorage } from "./test-utils/fake-preference-storage";
+import {
+  ProjectWorkspaceDefaultsService,
+  resolveProjectDefaultsScope,
+  getProjectHostPreferences,
+  ProjectWorkspaceDefaultsMapSchema,
+  type ProjectWorkspaceDefaultsMap,
+} from "./project-defaults";
+
+describe("project workspace defaults", () => {
+  it("keeps the originating project scope across equivalent host checkouts, while distinct projects stay separate", () => {
+    const origin = { viewKey: "clone-a", projectKey: "shared-repository" };
+    const equivalent = { viewKey: "clone-b", projectKey: "shared-repository" };
+    const separate = { viewKey: "other", projectKey: "different-repository" };
+    const projects = [origin, equivalent, separate];
+    expect(resolveProjectDefaultsScope(equivalent, origin.viewKey, projects)).toBe(origin.viewKey);
+    expect(resolveProjectDefaultsScope(separate, origin.viewKey, projects)).toBe(separate.viewKey);
+    expect(resolveProjectDefaultsScope(equivalent, equivalent.viewKey, projects)).toBe(
+      equivalent.viewKey,
+    );
+  });
+  function fixture(initial: ProjectWorkspaceDefaultsMap = {}) {
+    let saved = structuredClone(initial);
+    let fail = false;
+    const service = new ProjectWorkspaceDefaultsService({
+      read: async () => structuredClone(saved),
+      write: async (value) => {
+        if (fail) throw new Error("disk full");
+        saved = structuredClone(value);
+      },
+    });
+    return {
+      service,
+      saved: () => saved,
+      fail: (value: boolean) => {
+        fail = value;
+      },
+    };
+  }
+  const agent = {
+    serverId: "jp",
+    preferences: {
+      provider: "codex",
+      isolation: "worktree" as const,
+      providerPreferences: {
+        codex: {
+          model: "astra",
+          mode: "full-access",
+          thinkingByModel: { astra: "high" },
+          featureValues: { fast_mode: true },
+        },
+      },
+    },
+  };
+
+  it("starts without project records and serializes independent project saves", async () => {
+    const store = fixture();
+    expect(await store.service.load()).toEqual({});
+    await Promise.all([
+      store.service.save("project-a", agent, true),
+      store.service.save(
+        "project-b",
+        { serverId: "local", preferences: { provider: "claude" } },
+        true,
+      ),
+    ]);
+    expect(getProjectHostPreferences(store.saved()["project-a"], "jp")).toEqual(agent.preferences);
+    expect(getProjectHostPreferences(store.saved()["project-b"], "local")).toEqual({
+      provider: "claude",
+    });
+    expect(getProjectHostPreferences(store.saved()["project-a"], "local")).toBeUndefined();
+  });
+  it.each(["empty", "terminal"])(
+    "preserves agent configuration after a successful %s workspace",
+    async () => {
+      const store = fixture({ sharedProject: agent });
+      await store.service.save(
+        "sharedProject",
+        { serverId: "local", preferences: { isolation: "local", provider: "claude" } },
+        false,
+      );
+      expect(store.saved().sharedProject.serverId).toBe("local");
+      expect(getProjectHostPreferences(store.saved().sharedProject, "jp")).toEqual(
+        agent.preferences,
+      );
+      expect(getProjectHostPreferences(store.saved().sharedProject, "local")).toEqual({
+        isolation: "local",
+      });
+      await store.service.save(
+        "sharedProject",
+        { serverId: "jp", preferences: { isolation: "local" } },
+        false,
+      );
+      expect(getProjectHostPreferences(store.saved().sharedProject, "jp")).toEqual({
+        ...agent.preferences,
+        isolation: "local",
+      });
+    },
+  );
+  it("does not leak failed writes into later saves", async () => {
+    const store = fixture({ a: agent });
+    store.fail(true);
+    await expect(
+      store.service.save("a", { serverId: "other", preferences: {} }, true),
+    ).rejects.toThrow("disk full");
+    expect(store.saved()).toEqual({ a: agent });
+    store.fail(false);
+    await store.service.save("b", agent, true);
+    expect(store.saved().a).toEqual(agent);
+    expect(getProjectHostPreferences(store.saved().b, "jp")).toEqual(agent.preferences);
+  });
+  it("keeps successful configurations independent for each host and reads the previous format", async () => {
+    const store = fixture({ project: agent });
+    expect(getProjectHostPreferences(agent, "jp")).toEqual(agent.preferences);
+    expect(getProjectHostPreferences(agent, "local")).toBeUndefined();
+    const local = { provider: "claude", providerPreferences: { claude: { model: "opus" } } };
+    await store.service.save("project", { serverId: "local", preferences: local }, true);
+    expect(getProjectHostPreferences(store.saved().project, "jp")).toEqual(agent.preferences);
+    expect(getProjectHostPreferences(store.saved().project, "local")).toEqual(local);
+    await store.service.save("project", agent, true);
+    expect(getProjectHostPreferences(store.saved().project, "local")).toEqual(local);
+    expect(store.saved().project.serverId).toBe("jp");
+  });
+  it("rejects malformed records without accepting an empty host", () => {
+    expect(
+      ProjectWorkspaceDefaultsMapSchema.safeParse({ a: { ...agent, serverId: "" } }).success,
+    ).toBe(false);
+    expect(ProjectWorkspaceDefaultsMapSchema.parse({ a: agent })).toEqual({ a: agent });
+  });
+});
 
 describe("create agent preferences", () => {
   it("keeps the selected mode after saving model and thinking", async () => {

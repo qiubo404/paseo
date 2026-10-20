@@ -328,6 +328,17 @@ describe("combined model selector data", () => {
     ).toBe("Select model");
   });
 
+  it("keeps a remembered model visible when its provider is unavailable", () => {
+    expect(
+      resolveSelectedModelLabel({
+        providers: [],
+        selectedProvider: "missing-provider",
+        selectedModel: "remembered-model",
+        isLoading: false,
+      }),
+    ).toBe("remembered-model");
+  });
+
   it("keeps a stored selected model visible when current snapshot rows no longer offer it", () => {
     const providers = buildSelectableProviderSelectorProviders([
       snapshotEntry({

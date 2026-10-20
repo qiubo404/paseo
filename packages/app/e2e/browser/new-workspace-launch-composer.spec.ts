@@ -13,12 +13,15 @@ import {
   expectTerminalComposerActive,
   fillTerminalPrompt,
   seedTerminalProfiles,
+  submitTerminalLaunch,
+  expectWorkspaceOpensWithTerminalTab,
   selectChatLaunch,
   selectLaunchOption,
   terminalPromptInput,
   type TerminalProfile,
   type TerminalProfileSeed,
 } from "../support/helpers/new-workspace-launch";
+import { getServerId } from "../support/helpers/server-id";
 
 const PROFILE: TerminalProfile = {
   id: "e2e-composer-profile",
@@ -39,6 +42,42 @@ test.describe("New workspace: the composer is one control in two modes", () => {
   test.afterEach(async () => {
     await profileSeed.restore();
     await workspace?.cleanup();
+  });
+
+  test("creating a terminal workspace preserves the project's remembered agent setup", async ({
+    page,
+  }) => {
+    await gotoAppShell(page);
+    await waitForSidebarHydration(page);
+    const preferences = {
+      provider: "mock",
+      providerPreferences: { mock: { model: "ten-second-stream", mode: "load-test" } },
+      isolation: "local",
+    };
+    await page.evaluate(
+      ({ key, serverId, preferences: saved }) =>
+        localStorage.setItem(
+          "@paseo:project-workspace-defaults",
+          JSON.stringify({ [key]: { serverId, preferences: saved } }),
+        ),
+      { key: workspace.projectKey, serverId: getServerId(), preferences },
+    );
+    await page.reload();
+    await openNewWorkspaceComposer(page, workspace);
+    await selectLaunchOption(page, PROFILE.id);
+    await fillTerminalPrompt(page, "Terminal project defaults verification");
+    await submitTerminalLaunch(page);
+    await expectWorkspaceOpensWithTerminalTab(page);
+    expect(
+      await page.evaluate(
+        (key) => JSON.parse(localStorage.getItem("@paseo:project-workspace-defaults") ?? "{}")[key],
+        workspace.projectKey,
+      ),
+    ).toEqual({
+      serverId: getServerId(),
+      preferences,
+      hostPreferences: { [getServerId()]: preferences },
+    });
   });
 
   test("switching launch target does not leak draft text between chat and terminal, and drops the chat-only controls", async ({

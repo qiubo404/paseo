@@ -1343,6 +1343,24 @@ export const ar: TranslationResources = {
     },
   },
   newWorkspace: {
+    defaults: {
+      modelsLoadFailed:
+        "Could not load host models: {{reason}}. Reselect the host or refresh to retry.",
+      noModels:
+        "No models are available on this host. Check provider configuration or choose another host.",
+      loading: "Loading workspace configuration…",
+      loadFailed: "Could not load project configuration: {{reason}}",
+      saveFailed: "Workspace created, but its project configuration could not be saved: {{reason}}",
+      hostUnavailable: "Host {{value}} is unavailable. Reconnect or choose a host.",
+      projectUnavailable:
+        "This project is unavailable on the selected host. Choose a host for this project.",
+      isolationUnavailable:
+        "The saved workspace isolation is unavailable. Choose an isolation mode.",
+      providerUnavailable: "Provider {{value}} is unavailable on this host. Choose a model.",
+      modelUnavailable: "Model {{value}} is unavailable on this host. Choose a model.",
+      modeUnavailable: "Permission mode {{value}} is unavailable. Choose a permission mode.",
+      thinkingUnavailable: "Thinking level {{value}} is unavailable. Choose a thinking level.",
+    },
     title: "مساحة عمل جديدة",
     create: "يخلق",
     isolation: {

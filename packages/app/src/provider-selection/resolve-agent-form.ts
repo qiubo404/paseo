@@ -8,7 +8,7 @@ import {
   mergeProviderPreferences,
   type FormPreferences,
   type ProviderPreferences,
-} from "@/hooks/use-form-preferences";
+} from "@/create-agent-preferences/preferences";
 import { findModelByReference } from "./model-catalog";
 
 export interface FormInitialValues {
@@ -41,6 +41,7 @@ export interface AgentFormReducerState {
   userModified: UserModifiedFields;
   resolution: AgentFormResolutionState;
   inputs?: {
+    scopeKey?: string;
     serverId: string | null;
     initialValues: FormInitialValues | undefined;
     active: boolean;
@@ -66,6 +67,7 @@ export const RESOLVABLE_PROVIDER_STATUSES = new Set<ProviderSnapshotEntry["statu
 export const SELECTABLE_PROVIDER_STATUSES = new Set<ProviderSnapshotEntry["status"]>(["ready"]);
 
 interface AgentFormInputs {
+  scopeKey?: string;
   type: "INPUTS_CHANGED";
   serverId: string | null;
   isVisible: boolean;
@@ -83,6 +85,7 @@ export type AgentFormAction =
   | { type: "REQUEST_RESOLUTION" }
   | {
       type: "COMPLETE_RESOLUTION";
+      scopeKey?: string;
       initialValues: FormInitialValues | undefined;
       preferences: FormPreferences | null;
       providerModelsByProvider: ProviderModelsByProvider;
@@ -365,6 +368,7 @@ export function resolveFormState(
   userModified: UserModifiedFields,
   currentState: FormState,
   allowedProviderMap: Map<AgentProvider, AgentProviderDefinition>,
+  preserveUnavailableThinking = false,
 ): FormState {
   const result = { ...currentState };
 
@@ -408,7 +412,7 @@ export function resolveFormState(
     availableModels,
   });
 
-  if (result.provider && availableModels) {
+  if (result.provider && availableModels && !preserveUnavailableThinking) {
     result.thinkingOptionId = resolveThinkingOptionId({
       availableModels,
       modelId: result.model,
@@ -426,6 +430,7 @@ export function resolveFormStateFromProviderModels(
   userModified: UserModifiedFields,
   currentState: FormState,
   allowedProviderMap: Map<AgentProvider, AgentProviderDefinition>,
+  preserveUnavailableThinking = false,
 ): FormState {
   const providerResolved = resolveFormState(
     initialValues,
@@ -434,6 +439,7 @@ export function resolveFormStateFromProviderModels(
     userModified,
     currentState,
     allowedProviderMap,
+    preserveUnavailableThinking,
   );
   const availableModels = providerResolved.provider
     ? (providerModelsByProvider.get(providerResolved.provider) ?? null)
@@ -446,6 +452,7 @@ export function resolveFormStateFromProviderModels(
     userModified,
     currentState,
     allowedProviderMap,
+    preserveUnavailableThinking,
   );
 }
 
@@ -531,6 +538,7 @@ function completeResolution(
     state.userModified,
     state.form,
     action.allowedProviderMap,
+    action.scopeKey !== undefined,
   );
   const nextState = { ...state, resolution: { status: "completed" } as const };
   if (!hasFormStateChanged(state.form, resolved)) return nextState;
@@ -594,13 +602,37 @@ function receiveInputs(
   const initial = action.initialValues;
   const changed =
     previous?.active !== active ||
-    previous.serverId !== action.serverId ||
-    !sameInitialValues(previous.initialValues, initial);
+    (action.scopeKey !== undefined
+      ? previous?.scopeKey !== action.scopeKey
+      : previous.serverId !== action.serverId ||
+        !sameInitialValues(previous.initialValues, initial));
   let next = state;
   if (changed) {
     next = {
       ...resolveAgentForm(state, { type: action.isVisible ? "REQUEST_RESOLUTION" : "RESET" }),
-      inputs: { serverId: action.serverId, initialValues: initial, active },
+      ...(action.scopeKey !== undefined
+        ? { form: { provider: null, modeId: "", model: "", thinkingOptionId: "" } }
+        : {}),
+      inputs: {
+        serverId: action.serverId,
+        initialValues: initial,
+        active,
+        scopeKey: action.scopeKey,
+      },
+    };
+  } else if (
+    action.scopeKey !== undefined &&
+    (previous?.serverId !== action.serverId || !sameInitialValues(previous.initialValues, initial))
+  ) {
+    next = {
+      ...state,
+      resolution: PENDING_AGENT_FORM_RESOLUTION,
+      inputs: {
+        serverId: action.serverId,
+        initialValues: initial,
+        active,
+        scopeKey: action.scopeKey,
+      },
     };
   }
   if (!active || action.isPreferencesLoading || !action.serverId || !action.hasSnapshot)

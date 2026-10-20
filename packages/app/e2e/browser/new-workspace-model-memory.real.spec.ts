@@ -47,7 +47,13 @@ test("remembers real Codex GPT-6 Astra after repeated successful workspace creat
       const count = index + 1;
       await test.step(`create workspace ${count} and return`, async () => {
         await select(page, "codex", label);
-        await expectSavedSelection(page, "codex", "gpt-6-astra");
+        expect(
+          await page.evaluate(
+            () =>
+              JSON.parse(localStorage.getItem("@paseo:create-agent-preferences") ?? "{}")
+                .provider ?? null,
+          ),
+        ).toBeNull();
         await submitNewWorkspacePrompt(page, "Reply with OK. Do not use tools or change files.");
         await expect(page).toHaveURL(/\/workspace\//);
         await expectCreatedModelAgents(page, client, "codex", "gpt-6-astra", count);
@@ -57,7 +63,7 @@ test("remembers real Codex GPT-6 Astra after repeated successful workspace creat
           timeout: 60_000,
         });
         await openGlobalNewWorkspaceComposer(page);
-        await expectSavedSelection(page, "codex", "gpt-6-astra");
+        await expectSavedSelection(page, "codex", "gpt-6-astra", workspace.projectKey);
         await expectRememberedModel(page, label);
       });
     }

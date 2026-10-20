@@ -3,14 +3,16 @@ import { expect, type Page } from "../fixtures";
 import { drillIntoProvider, openModelPicker } from "./agent-profiles";
 
 export async function startWithoutRememberedModel(page: Page) {
-  await page.addInitScript(() => localStorage.removeItem("@paseo:create-agent-preferences"));
+  await page.addInitScript(() => {
+    localStorage.removeItem("@paseo:create-agent-preferences");
+    localStorage.removeItem("@paseo:project-workspace-defaults");
+  });
 }
 
 export async function chooseModel(page: Page, provider: string, label: string) {
   await openModelPicker(page);
-  await expect(
-    page.getByRole("dialog").getByRole("button", { name: "Back", exact: true }),
-  ).toHaveCount(0);
+  const back = page.getByRole("dialog").getByRole("button", { name: "Back", exact: true });
+  if (await back.isVisible()) await back.click();
   await selectProviderModel(page, provider, label);
 }
 
@@ -31,12 +33,22 @@ async function selectProviderModel(page: Page, provider: string, label: string) 
   ).toBeVisible();
 }
 
-export async function expectSavedSelection(page: Page, provider: string, model: string) {
+export async function expectSavedSelection(
+  page: Page,
+  provider: string,
+  model: string,
+  projectKey?: string,
+) {
   await expect
     .poll(() =>
-      page.evaluate(() =>
-        JSON.parse(localStorage.getItem("@paseo:create-agent-preferences") ?? "null"),
-      ),
+      page.evaluate((key) => {
+        if (!key)
+          return JSON.parse(localStorage.getItem("@paseo:create-agent-preferences") ?? "null");
+        const viewKey = key;
+        return JSON.parse(localStorage.getItem("@paseo:project-workspace-defaults") ?? "{}")?.[
+          viewKey
+        ]?.preferences;
+      }, projectKey),
     )
     .toMatchObject({ provider, providerPreferences: { [provider]: { model } } });
 }

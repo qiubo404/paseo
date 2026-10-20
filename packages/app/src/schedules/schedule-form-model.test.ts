@@ -336,31 +336,11 @@ describe("schedule form model", () => {
       selectedProjectOptionId: "",
       selectedModelDisplay: null,
       selectedThinkingDisplay: null,
-      archiveOnFinish: false,
+      archiveOnFinish: true,
       isolation: "local",
       effectiveIsolation: "local",
       providerResolutionByServerId: {},
     });
-  });
-
-  it("preserves explicitly enabled archive on finish when editing", () => {
-    const schedule = scheduleOnHost({
-      serverId: "host-a",
-      serverName: "Host A",
-      cwd: "/repo/a",
-      model: "model-a",
-    });
-    schedule.target = {
-      type: "new-agent",
-      config: { provider: "mock", cwd: "/repo/a", archiveOnFinish: true },
-    };
-    const form = open({
-      mode: "edit",
-      schedule,
-      defaults: { serverId: "host-a", projectTargets: PROJECT_TARGETS, preferences: {} },
-    });
-
-    expect(form.getState().archiveOnFinish).toBe(true);
   });
 
   it("derives the host to project to model disclosure chain from model state", () => {
