@@ -157,7 +157,7 @@ function shouldArchiveScheduleRunWorkspace(input: {
   agentId: string | null;
   archiveOnFinish?: boolean;
 }): boolean {
-  return input.agentId === null || (input.archiveOnFinish ?? true);
+  return input.agentId === null || (input.archiveOnFinish ?? false);
 }
 
 function shouldCompleteSchedule(schedule: StoredSchedule, now: Date): boolean {

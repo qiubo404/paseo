@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   FIT_TRANSFORM,
+  normalizedContentPoint,
   clampTransform,
   fitContentSize,
   isActivePinchUpdate,
@@ -104,5 +105,36 @@ describe("zoomable viewport geometry", () => {
         maxScale: 8,
       }),
     ).toEqual({ scale: 0.25, x: 0, y: 0 });
+  });
+});
+
+describe("image review coordinates", () => {
+  it("rejects letterboxing and inverts zoom and pan into original-image coordinates", () => {
+    const reviewViewport = { width: 1000, height: 800 };
+    const reviewContent = { width: 300, height: 600 };
+    expect(
+      normalizedContentPoint({
+        point: { x: 100, y: 400 },
+        viewport: reviewViewport,
+        fittedContent: reviewContent,
+        transform: FIT_TRANSFORM,
+      }),
+    ).toBeNull();
+    expect(
+      normalizedContentPoint({
+        point: { x: 500, y: 400 },
+        viewport: reviewViewport,
+        fittedContent: reviewContent,
+        transform: FIT_TRANSFORM,
+      }),
+    ).toEqual({ x: 0.5, y: 0.5 });
+    expect(
+      normalizedContentPoint({
+        point: { x: 450, y: 120 },
+        viewport: reviewViewport,
+        fittedContent: reviewContent,
+        transform: { scale: 2, x: 100, y: 20 },
+      }),
+    ).toEqual({ x: 0.25, y: 0.25 });
   });
 });

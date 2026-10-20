@@ -1,3 +1,4 @@
+import { imageReviewAttachment } from "@/attachments/image-review";
 import type { ComposerAttachment } from "@/attachments/types";
 import type { ImageAttachment } from "@/composer/types";
 import {
@@ -47,6 +48,15 @@ export function splitComposerAttachmentsForSubmit(
   for (const attachment of attachments) {
     if (attachment.kind === "image") {
       images.push(attachment.metadata);
+      if (attachment.comments?.length) {
+        agentAttachments.push(
+          imageReviewAttachment({
+            metadata: attachment.metadata,
+            imageNumber: images.length,
+            comments: attachment.comments,
+          }),
+        );
+      }
       continue;
     }
 

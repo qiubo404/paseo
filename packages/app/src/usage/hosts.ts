@@ -4,12 +4,7 @@ import {
   useActiveWorkspaceSelection,
   useLastWorkspaceSelection,
 } from "@/stores/navigation-active-workspace-store";
-import {
-  resolveUsageHostId,
-  resolveUsageModalHostId,
-  type UsageHost,
-  type UsageHostChoice,
-} from "./model";
+import { resolveUsageHostId, type UsageHost, type UsageHostChoice } from "./model";
 import { setUsageHost } from "./preferences";
 import { useUsageHosts } from "./queries";
 
@@ -35,8 +30,7 @@ export function useUsageHostId(): string | null {
 }
 
 /**
- * The host the Usage modal shows, and the hosts to pick from. A pick
- * is saved on the device, so the sidebar Usage row and later visits show the same host.
+ * The sidebar summary's host and the reporting hosts available in Usage settings.
  */
 export function useUsageHostSelection(): {
   serverId: string | null;
@@ -46,7 +40,7 @@ export function useUsageHostSelection(): {
   const { updateSettings } = useAppSettings();
   const choice = useUsageHostChoice();
   const connectedHosts = useMemo(
-    () => choice.hosts.filter((host) => host.isConnected),
+    () => choice.hosts.filter((host) => host.isConnected && host.supportsUsage),
     [choice.hosts],
   );
   const select = useCallback(
@@ -55,5 +49,5 @@ export function useUsageHostSelection(): {
     },
     [updateSettings],
   );
-  return { serverId: resolveUsageModalHostId(choice), connectedHosts, select };
+  return { serverId: resolveUsageHostId(choice), connectedHosts, select };
 }

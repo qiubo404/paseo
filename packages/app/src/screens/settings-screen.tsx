@@ -614,6 +614,7 @@ function DesktopAppUpdateRow() {
   const { t } = useTranslation();
   const { settings, updateSettings } = useSettings();
   const {
+    notificationOnly,
     isDesktopApp,
     statusText,
     availableUpdate,
@@ -691,24 +692,29 @@ function DesktopAppUpdateRow() {
 
   return (
     <>
-      <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
-        <View style={settingsStyles.rowContent}>
-          <Text style={settingsStyles.rowTitle}>{t("settings.about.releaseChannel.label")}</Text>
-          <Text style={settingsStyles.rowHint}>
-            {t("settings.about.releaseChannel.description")}
-          </Text>
+      {notificationOnly === false ? (
+        <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
+          <View style={settingsStyles.rowContent}>
+            <Text style={settingsStyles.rowTitle}>{t("settings.about.releaseChannel.label")}</Text>
+            <Text style={settingsStyles.rowHint}>
+              {t("settings.about.releaseChannel.description")}
+            </Text>
+          </View>
+          <SegmentedControl
+            size="sm"
+            value={settings.releaseChannel}
+            onValueChange={handleReleaseChannelChange}
+            options={releaseChannelOptions}
+          />
         </View>
-        <SegmentedControl
-          size="sm"
-          value={settings.releaseChannel}
-          onValueChange={handleReleaseChannelChange}
-          options={releaseChannelOptions}
-        />
-      </View>
+      ) : null}
       <View style={[settingsStyles.row, settingsStyles.rowBorder]}>
         <View style={settingsStyles.rowContent}>
           <Text style={settingsStyles.rowTitle}>{t("settings.about.updates.label")}</Text>
           <Text style={settingsStyles.rowHint}>{statusText}</Text>
+          {notificationOnly ? (
+            <Text style={settingsStyles.rowHint}>{t("desktop.updates.notificationOnly")}</Text>
+          ) : null}
           {readyUpdateVersion ? (
             <Text style={settingsStyles.rowHint}>
               {t("settings.about.updates.readyToInstall", {
@@ -718,24 +724,28 @@ function DesktopAppUpdateRow() {
           ) : null}
           {errorMessage ? <Text style={styles.aboutErrorText}>{errorMessage}</Text> : null}
         </View>
-        <View style={styles.aboutUpdateActions}>
-          <Button
-            variant="outline"
-            size="sm"
-            onPress={handleCheckForUpdates}
-            disabled={isChecking || isInstalling}
-          >
-            {isChecking ? t("settings.about.updates.checking") : t("settings.about.updates.check")}
-          </Button>
-          <Button
-            variant="default"
-            size="sm"
-            onPress={handleInstallUpdate}
-            disabled={isChecking || isInstalling || !isUpdateReady}
-          >
-            {getUpdateButtonLabel(t, isInstalling, readyUpdateVersion)}
-          </Button>
-        </View>
+        {notificationOnly === false ? (
+          <View style={styles.aboutUpdateActions}>
+            <Button
+              variant="outline"
+              size="sm"
+              onPress={handleCheckForUpdates}
+              disabled={isChecking || isInstalling}
+            >
+              {isChecking
+                ? t("settings.about.updates.checking")
+                : t("settings.about.updates.check")}
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              onPress={handleInstallUpdate}
+              disabled={isChecking || isInstalling || !isUpdateReady}
+            >
+              {getUpdateButtonLabel(t, isInstalling, readyUpdateVersion)}
+            </Button>
+          </View>
+        ) : null}
       </View>
     </>
   );

@@ -26,6 +26,7 @@ export interface HostFilterProps {
   includeAllHost?: boolean;
   triggerTestID?: string;
   hostOptionTestID?: (serverId: string) => string;
+  title?: string;
 }
 
 /**
@@ -40,6 +41,7 @@ export function HostFilter({
   includeAllHost = true,
   triggerTestID,
   hostOptionTestID,
+  title,
 }: HostFilterProps): ReactElement {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const filterAnchorRef = useRef<View>(null);
@@ -70,7 +72,7 @@ export function HostFilter({
       anchorRef={filterAnchorRef}
       includeAllHost={includeAllHost}
       searchable={false}
-      title="Filter by host"
+      title={title ?? "Filter by host"}
       desktopPlacement="bottom-start"
       hostOptionTestID={hostOptionTestID}
     >
@@ -80,7 +82,7 @@ export function HostFilter({
           style={filterTriggerStyle}
           testID={triggerTestID}
           accessibilityRole="button"
-          accessibilityLabel={`Filter: ${selectedHostLabel}`}
+          accessibilityLabel={`${title ?? "Filter"}: ${selectedHostLabel}`}
         >
           {selectedHost === ALL_HOSTS_OPTION_ID ? (
             <ThemedServer size={14} uniProps={mutedColorMapping} />
@@ -100,8 +102,10 @@ export function HostFilter({
 const styles = StyleSheet.create((theme) => ({
   filterTriggerWrap: {
     alignSelf: "flex-start",
+    maxWidth: "100%",
   },
   filterTrigger: {
+    maxWidth: "100%",
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[1.5],
@@ -120,6 +124,7 @@ const styles = StyleSheet.create((theme) => ({
     backgroundColor: theme.colors.surface3,
   },
   filterTriggerText: {
+    flexShrink: 1,
     color: theme.colors.foreground,
     fontSize: theme.fontSize.base,
     fontWeight: theme.fontWeight.medium,

@@ -1,15 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Image, View, type StyleProp, type ViewStyle } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
-import type { ViewportFitOptions, ViewportSize } from "./geometry";
+import type { ViewportFitOptions, ViewportSize, ViewportPoint } from "./geometry";
 import { ZoomableViewport } from "./index";
-import type { ZoomableViewportAction } from "./types";
+import type { ZoomableViewportAction, ZoomableViewportProps } from "./types";
 
 interface ZoomableImageProps {
   uri: string;
+  overlay?: ReactNode;
+  renderOverlay?: ZoomableViewportProps["renderOverlay"];
+  toolbarPlacement?: ZoomableViewportProps["toolbarPlacement"];
+  onContentPress?: (point: ViewportPoint) => void;
   accessibilityLabel?: string;
   actions?: ZoomableViewportAction[];
   contentSize?: ViewportSize;
+  onContentSizeResolved?: (size: ViewportSize) => void;
   fit?: ViewportFitOptions;
   maxScale?: number;
   minScale?: number;
@@ -22,9 +27,14 @@ interface ZoomableImageProps {
 
 export function ZoomableImage({
   uri,
+  overlay,
+  renderOverlay,
+  toolbarPlacement,
+  onContentPress,
   accessibilityLabel,
   actions,
   contentSize,
+  onContentSizeResolved,
   fit,
   maxScale,
   minScale = 1,
@@ -37,6 +47,9 @@ export function ZoomableImage({
   const [loadedSize, setLoadedSize] = useState<ViewportSize | null>(null);
   const resolvedSize = contentSize ?? loadedSize;
   const source = useMemo(() => ({ uri }), [uri]);
+  useEffect(() => {
+    if (resolvedSize) onContentSizeResolved?.(resolvedSize);
+  }, [onContentSizeResolved, resolvedSize]);
 
   useEffect(() => {
     if (contentSize) return;
@@ -81,6 +94,9 @@ export function ZoomableImage({
       maxScale={maxScale}
       minScale={minScale}
       onPressOutsideContent={onPressOutsideContent}
+      onContentPress={onContentPress}
+      renderOverlay={renderOverlay}
+      toolbarPlacement={toolbarPlacement}
       style={style}
       testID={testID}
       wheelActivation={wheelActivation}
@@ -92,6 +108,7 @@ export function ZoomableImage({
         style={styles.image}
         testID={`${testID}-image`}
       />
+      {overlay}
     </ZoomableViewport>
   );
 }

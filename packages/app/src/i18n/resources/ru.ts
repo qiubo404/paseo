@@ -154,6 +154,13 @@ export const ru: TranslationResources = {
       dictation: "Диктовка",
       interruptBeforeVoice: "Остановите агента перед запуском голосового режима",
     },
+    imageReview: {
+      commentNumber: "Комментарий {{number}}",
+      comment: "Добавить комментарий",
+      hint: "Нажмите на изображение, чтобы добавить комментарий. Перетаскивайте для перемещения, прокручивайте для масштаба.",
+      delete: "Удалить",
+      done: "Готово",
+    },
     attachments: {
       addImage: "Добавить изображение",
       pasteImage: "Вставить изображение",
@@ -321,6 +328,14 @@ export const ru: TranslationResources = {
     },
   },
   message: {
+    imageCopy: "Копировать изображение",
+    imageCopying: "Копирование изображения...",
+    imageCopied: "Изображение скопировано",
+    imageCopyFailed: "Не удалось скопировать изображение: {{reason}}",
+    imageAddToChat: "Добавить в поле чата",
+    imageAddingToChat: "Добавление изображения...",
+    imageAddFailed: "Не удалось добавить изображение: {{reason}}",
+    imageAddInvalid: "Данные изображения недоступны",
     diagram: {
       diagram: "Диаграмма",
       zoomIn: "Увеличить масштаб",
@@ -1167,6 +1182,8 @@ export const ru: TranslationResources = {
     },
   },
   sidebar: {
+    usageHost: "Сервер квоты в боковой панели",
+    refreshUsage: "Обновить квоту текущего чата",
     statusGroupAccessibility: "Группа «{{label}}»",
     statusBucket: {
       needsInput: "Ожидает ввода",
@@ -1453,7 +1470,10 @@ export const ru: TranslationResources = {
       loadFailed: "Не удалось загрузить статус встроенного демона.",
     },
     updates: {
+      notificationOnly:
+        "Paseo Review только уведомляет об официальных выпусках. Для обновления объедините официальные изменения и заново соберите приложение.",
       status: {
+        officialReleaseAvailable: "Доступен официальный выпуск {{version}}.",
         checking: "Проверка обновлений приложения...",
         installing: "Установка обновления приложения...",
         upToDate: "Установлена последняя версия приложения.",
@@ -1477,6 +1497,7 @@ export const ru: TranslationResources = {
       },
       installError: "Не удалось установить обновление настольного приложения.",
       callout: {
+        officialReleaseTitle: "Новый официальный выпуск",
         installingTitle: "Установка обновления",
         failedTitle: "Обновление не выполнено",
         availableTitle: "Доступно обновление",

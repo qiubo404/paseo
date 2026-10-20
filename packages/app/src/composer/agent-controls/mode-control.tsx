@@ -13,7 +13,7 @@ import { getAgentControlHintKey } from "@/composer/agent-controls/utils";
 import { useShortcutKeys } from "@/hooks/use-shortcut-keys";
 import { useKeyboardActionHandler } from "@/hooks/use-keyboard-action-handler";
 import type { KeyboardActionDefinition } from "@/keyboard/keyboard-action-dispatcher";
-import { resolveNextAgentModeId } from "@/composer/agent-controls/mode";
+import { resolveAgentModeShortcut } from "@/composer/agent-controls/mode";
 import { useComposerKeyboardScope } from "@/composer/keyboard-scope";
 import { useComposerControlLayout } from "@/composer/agent-controls/layout-context";
 import { AgentControlTrigger } from "@/composer/agent-controls/control";
@@ -24,7 +24,7 @@ import { resolveProviderDefinition } from "@/utils/provider-definitions";
 import { useToast } from "@/contexts/toast-context";
 import { toErrorMessage } from "@/utils/error-messages";
 import { showProviderNoticeToast } from "@/utils/provider-notice-toast";
-import type { AgentMode } from "@getpaseo/protocol/agent-types";
+import type { AgentFeature, AgentMode } from "@getpaseo/protocol/agent-types";
 import type { AgentProviderDefinition } from "@getpaseo/protocol/provider-manifest";
 import { getAgentModeIcon, getAgentModeOptionIcon } from "@/agent-controls/icons";
 interface ModeComboboxOptionProps {
@@ -84,7 +84,14 @@ export function AgentModeControl({
   disabled = false,
   surface = "toolbar",
   onClose,
-}: AgentModeControlValue & { surface?: "toolbar" | "sheet"; onClose?: () => void }) {
+  features = [],
+  onSetFeature,
+}: AgentModeControlValue & {
+  surface?: "toolbar" | "sheet";
+  onClose?: () => void;
+  features?: AgentFeature[];
+  onSetFeature?: (featureId: string, value: unknown) => void;
+}) {
   const { theme } = useUnistyles();
   const { presentation } = useComposerControlLayout();
   const { t } = useTranslation();
@@ -141,18 +148,37 @@ export function AgentModeControl({
     (action: KeyboardActionDefinition): boolean => {
       if (action.id !== "message-input.mode-cycle") return false;
       if (disabled || !isActiveComposer) return false;
-      const nextModeId = resolveNextAgentModeId({ modeOptions, selectedMode: selectedModeId });
-      if (!nextModeId) return false;
-      onSelectMode(nextModeId);
+      const next = resolveAgentModeShortcut({
+        provider,
+        features,
+        modeOptions,
+        selectedMode: selectedModeId,
+      });
+      if (!next) return false;
+      if (next.type === "feature") {
+        if (!onSetFeature) return false;
+        onSetFeature(next.featureId, next.value);
+      } else {
+        onSelectMode(next.modeId);
+      }
       return true;
     },
-    [disabled, isActiveComposer, modeOptions, onSelectMode, selectedModeId],
+    [
+      disabled,
+      isActiveComposer,
+      provider,
+      features,
+      modeOptions,
+      onSetFeature,
+      onSelectMode,
+      selectedModeId,
+    ],
   );
 
   useKeyboardActionHandler({
     handlerId: keyboardHandlerIdRef.current,
     actions: ["message-input.mode-cycle"],
-    enabled: isActiveComposer && !disabled && modeOptions.length > 1,
+    enabled: isActiveComposer && !disabled,
     priority: 200,
     handle: handleKeyboardAction,
   });
@@ -216,7 +242,9 @@ export function AgentModeControl({
         <TooltipContent side="top" align="center" offset={8}>
           <View style={styles.tooltipRow}>
             <Text style={styles.tooltipText}>{t(getAgentControlHintKey("mode"))}</Text>
-            {isActiveComposer && cycleShortcutKeys ? <Shortcut chord={cycleShortcutKeys} /> : null}
+            {isActiveComposer && provider !== "codex" && cycleShortcutKeys ? (
+              <Shortcut chord={cycleShortcutKeys} />
+            ) : null}
           </View>
         </TooltipContent>
       </Tooltip>

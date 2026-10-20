@@ -17,6 +17,15 @@ function input(overrides: Partial<ResolveUpdateCalloutInput> = {}): ResolveUpdat
 }
 
 describe("resolveUpdateCalloutDescriptor", () => {
+  it("announces official releases without any update actions for notification-only builds", () => {
+    const descriptor = resolveUpdateCalloutDescriptor(input({ notificationOnly: true }));
+    expect(descriptor?.title).toBe("New official release");
+    expect(descriptor?.body).toEqual({ kind: "notice", versionLabel: "v1.2.3" });
+    expect(descriptor?.actions).toEqual([]);
+    expect(
+      resolveUpdateCalloutDescriptor(input({ notificationOnly: true, status: "error" })),
+    ).toBeNull();
+  });
   it("returns null when not running as a desktop app", () => {
     expect(resolveUpdateCalloutDescriptor(input({ isDesktopApp: false }))).toBeNull();
   });

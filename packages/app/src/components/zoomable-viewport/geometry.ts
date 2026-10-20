@@ -146,3 +146,18 @@ export function panContent(input: {
     input.limits,
   );
 }
+
+export function normalizedContentPoint(input: {
+  point: ViewportPoint;
+  transform: ViewportTransform;
+  fittedContent: ViewportSize;
+  viewport: ViewportSize;
+}): ViewportPoint | null {
+  if (!isPointInsideTransformedContent(input)) return null;
+  const width = input.fittedContent.width * input.transform.scale;
+  const height = input.fittedContent.height * input.transform.scale;
+  if (width <= 0 || height <= 0) return null;
+  const left = input.viewport.width / 2 + input.transform.x - width / 2;
+  const top = input.viewport.height / 2 + input.transform.y - height / 2;
+  return { x: (input.point.x - left) / width, y: (input.point.y - top) / height };
+}

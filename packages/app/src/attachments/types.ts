@@ -1,3 +1,4 @@
+import type { ImageReviewComment } from "./image-review";
 import type {
   AgentAttachment,
   ForgeSearchItem,
@@ -104,7 +105,7 @@ export interface WorkspaceFileComposerAttachment {
 }
 
 export type UserComposerAttachment =
-  | { kind: "image"; metadata: AttachmentMetadata }
+  | { kind: "image"; metadata: AttachmentMetadata; comments?: ImageReviewComment[] }
   | { kind: "file"; attachment: UploadedFileAttachment }
   | WorkspaceFileComposerAttachment
   | PluginResourceComposerAttachment

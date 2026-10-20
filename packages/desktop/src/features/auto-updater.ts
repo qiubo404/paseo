@@ -5,6 +5,7 @@ import { app } from "electron";
 import { UUID } from "builder-util-runtime";
 import log from "electron-log/main";
 import { autoUpdater } from "electron-updater";
+import { checkReviewRelease } from "./review-update-check.js";
 import {
   createAppUpdateService,
   type AppUpdateCheckResult,
@@ -224,7 +225,8 @@ class ElectronAppUpdateRuntime implements AppUpdateRuntime {
 
 const appUpdateService = createAppUpdateService({
   runtime: new ElectronAppUpdateRuntime(),
-  isPackaged: () => app.isPackaged,
+  // Review builds read release metadata separately and never initialize the installer.
+  isPackaged: () => app.isPackaged && !app.getVersion().includes("-review."),
   now: () => Date.now(),
   bucket: async () => bucketFromStagingUserId(await getStagingUserId()),
   reportCheckError: (error) => {
@@ -252,11 +254,9 @@ export async function checkForAppUpdate({
   intent: AppUpdateCheckIntent;
 }): Promise<AppUpdateCheckResult> {
   updateLifecycleLog.checkStarted({ currentVersion, releaseChannel, intent });
-  const result = await appUpdateService.checkForAppUpdate({
-    currentVersion,
-    releaseChannel,
-    intent,
-  });
+  const result = app.getVersion().includes("-review.")
+    ? await checkReviewRelease(currentVersion)
+    : await appUpdateService.checkForAppUpdate({ currentVersion, releaseChannel, intent });
   updateLifecycleLog.checkCompleted({
     currentVersion,
     targetVersion: result.latestVersion,
@@ -279,6 +279,14 @@ export async function downloadAndInstallUpdate(
   },
   onBeforeQuit?: () => Promise<void>,
 ): Promise<AppUpdateInstallResult> {
+  if (app.getVersion().includes("-review.")) {
+    return {
+      installed: false,
+      version: currentVersion,
+      message:
+        "Paseo Review only reports official releases. Update it by rebuilding the custom app.",
+    };
+  }
   return appUpdateService.downloadAndInstallUpdate(
     { currentVersion, releaseChannel },
     onBeforeQuit,
@@ -294,6 +302,7 @@ export async function installAppUpdateOnQuit({
   releaseChannel: AppReleaseChannel;
   signal: AbortSignal;
 }): Promise<boolean> {
+  if (app.getVersion().includes("-review.")) return false;
   if (
     !shouldInstallAppUpdateOnQuit({
       platform: process.platform,

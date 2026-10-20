@@ -149,6 +149,13 @@ export const en = {
       dictation: "Dictation",
       interruptBeforeVoice: "Interrupt the agent before starting voice mode",
     },
+    imageReview: {
+      commentNumber: "Comment {{number}}",
+      comment: "Add a comment",
+      hint: "Click the image to add a comment. Drag to pan; scroll to zoom.",
+      delete: "Delete",
+      done: "Done",
+    },
     attachments: {
       addImage: "Add image",
       pasteImage: "Paste image",
@@ -314,6 +321,14 @@ export const en = {
     },
   },
   message: {
+    imageCopy: "Copy image",
+    imageCopying: "Copying image...",
+    imageCopied: "Image copied",
+    imageCopyFailed: "Unable to copy image: {{reason}}",
+    imageAddToChat: "Add to chat input",
+    imageAddingToChat: "Adding image...",
+    imageAddFailed: "Unable to add image: {{reason}}",
+    imageAddInvalid: "Image data is unavailable",
     diagram: {
       diagram: "Diagram",
       zoomIn: "Zoom in",
@@ -1158,6 +1173,8 @@ export const en = {
     },
   },
   sidebar: {
+    usageHost: "Sidebar usage host",
+    refreshUsage: "Refresh current chat usage",
     statusGroupAccessibility: "{{label}} group",
     statusBucket: {
       needsInput: "Needs input",
@@ -1458,7 +1475,10 @@ export const en = {
       loadFailed: "Unable to load desktop daemon status.",
     },
     updates: {
+      notificationOnly:
+        "Paseo Review only reports official releases. Merge the official changes and rebuild to update this custom app.",
       status: {
+        officialReleaseAvailable: "Official release {{version}} is available.",
         checking: "Checking for app updates...",
         installing: "Installing app update...",
         upToDate: "App is up to date.",
@@ -1479,6 +1499,7 @@ export const en = {
       },
       installError: "Unable to install the desktop app update.",
       callout: {
+        officialReleaseTitle: "New official release",
         installingTitle: "Installing update",
         failedTitle: "Update failed",
         availableTitle: "Update available",

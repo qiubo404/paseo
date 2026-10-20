@@ -3,6 +3,14 @@ import { usageCopy } from "./copy";
 import type { UsageDisplayAs } from "./preferences";
 import type { UsageReport, UsageReportEntry, UsageView, UsageWindow } from "./types";
 
+/** Host summaries respect explicit provider switches; independent subscription sources stay visible. */
+export function enabledHostUsageReports(
+  reports: readonly UsageReportEntry[],
+  providers: Readonly<Record<string, { enabled?: boolean }>>,
+): UsageReportEntry[] {
+  return reports.filter((report) => providers[report.sourceId]?.enabled !== false);
+}
+
 export function usedPercent(window: UsageWindow): number | null {
   if (window.usedPct != null) return window.usedPct;
   if (window.remainingPct != null) return 100 - window.remainingPct;

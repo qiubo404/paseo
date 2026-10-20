@@ -11,7 +11,7 @@ import { inheritLoginShellEnv } from "./login-shell-env.js";
 
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { existsSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
 import {
   app,
@@ -112,10 +112,36 @@ import {
 import { AgentNavigationInbox, parseAgentDeepLinkFromArgv } from "./agent-navigation.js";
 
 const DEV_SERVER_URL = process.env.EXPO_DEV_URL ?? "http://localhost:8081";
+const IS_REVIEW_BUILD = app.getVersion().includes("-review.");
+// Host allowlists recognize this renderer origin. The review build keeps its
+// profile and OS deep-link registration separate without changing the origin.
 const APP_SCHEME = "paseo";
 const PASEO_DEBUG = process.env.PASEO_DEBUG === "1";
 const DISABLE_SINGLE_INSTANCE_LOCK = process.env.PASEO_DISABLE_SINGLE_INSTANCE_LOCK === "1";
-const APP_NAME = process.env.PASEO_TEST_APP_NAME?.trim() || "Paseo";
+const DEFAULT_APP_NAME = IS_REVIEW_BUILD ? "Paseo Review" : "Paseo";
+const APP_NAME = process.env.PASEO_TEST_APP_NAME?.trim() || DEFAULT_APP_NAME;
+if (IS_REVIEW_BUILD) {
+  const reviewHome = path.join(app.getPath("appData"), "Paseo Review");
+  // Share the original host's projects and sessions while keeping renderer
+  // drafts and managed attachment files in Review's own profile.
+  process.env.PASEO_DESKTOP_DAEMON_HOME ??=
+    process.env.PASEO_HOME ?? path.join(app.getPath("home"), ".paseo");
+  process.env.PASEO_HOME ??= path.join(reviewHome, "daemon");
+  const configPath = path.join(process.env.PASEO_HOME, "config.json");
+  if (!existsSync(configPath)) {
+    mkdirSync(process.env.PASEO_HOME, { recursive: true });
+    const config = {
+      version: 1,
+      daemon: {
+        listen: process.env.PASEO_LISTEN ?? "127.0.0.1:6769",
+        relay: { enabled: false },
+        cors: { allowedOrigins: [`${APP_SCHEME}://app`] },
+      },
+    };
+    writeFileSync(configPath, JSON.stringify(config, null, 2), { mode: 0o600, flag: "wx" });
+  }
+  app.setPath("userData", reviewHome);
+}
 const DESKTOP_WINDOW_CHROME_MODE = resolveDesktopWindowChromeMode({
   platform: process.platform,
   override: process.env.PASEO_DESKTOP_WINDOW_CONTROLS,

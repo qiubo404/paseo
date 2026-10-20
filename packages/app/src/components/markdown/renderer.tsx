@@ -16,6 +16,7 @@ import { createMarkdownStyles } from "./styles";
 import { PENDING_MARKDOWN_IMAGE } from "./source";
 import { splitStreamingMarkdown } from "./streaming";
 import { useMarkdownSource, type MarkdownImageContext } from "./images";
+import { MarkdownImageMenu } from "./image-menu";
 
 import { MermaidFence, MermaidStreamingContext, splitMermaidFences } from "./fence/mermaid";
 
@@ -29,6 +30,7 @@ const regularStyle = markdownStyle(false);
 const compactStyle = markdownStyle(true);
 
 export interface MarkdownRendererProps extends MarkdownImageContext {
+  imageDraftKey?: string;
   text: string;
   compact?: boolean;
   streaming?: boolean;
@@ -58,6 +60,7 @@ const MarkdownPart = memo(function MarkdownPart({
   compact = false,
   streaming = false,
   onLinkPress,
+  imageDraftKey,
   ...imageContext
 }: MarkdownRendererProps) {
   const environment = useAssistantFileLinkEnvironment();
@@ -67,12 +70,13 @@ const MarkdownPart = memo(function MarkdownPart({
     (environment.client?.readFile
       ? { readFile: environment.client.readFile.bind(environment.client) }
       : undefined);
-  const { markdown, imageSources, linkRecognition, linkSource } = useMarkdownSource(text, {
-    workspaceRoot: environment.workspaceRoot,
-    serverId: environment.serverId,
-    ...imageContext,
-    client,
-  });
+  const { markdown, imageSources, imageAttachments, linkRecognition, linkSource } =
+    useMarkdownSource(text, {
+      workspaceRoot: environment.workspaceRoot,
+      serverId: environment.serverId,
+      ...imageContext,
+      client,
+    });
   const [image, setImage] = useState<ImageLightboxSource | null>(null);
   const pressLink = useStableEvent(({ url, sourceType }: LinkPressEvent) => {
     const source = linkSource(url, sourceType);
@@ -90,31 +94,33 @@ const MarkdownPart = memo(function MarkdownPart({
   );
   return (
     <MermaidStreamingContext.Provider value={streaming}>
-      <MarkdownBlockStack imageSources={imageSources}>
-        {segments.map((segment) =>
-          segment.kind === "mermaid" ? (
-            <MermaidFence key={`${segment.kind}:${segment.id}`} code={segment.source} />
-          ) : (
-            <ThemedMarkdown
-              key={`${segment.kind}:${segment.id}`}
-              markdown={segment.source}
-              uniProps={compact ? compactStyle : regularStyle}
-              flavor="github"
-              selectable
-              md4cFlags={MD4C_FLAGS}
-              linkRecognition={linkRecognition}
-              enableTaskListItemToggle={false}
-              enableLinkPreview={false}
-              enableBlockContextMenu={false}
-              // JS reveal owns pacing; native fade animation is a separate experiment.
-              streamingAnimation={false}
-              onLinkPress={pressLink}
-              onImagePress={pressImage}
-              renderers={isWeb ? WEB_RENDERERS : undefined}
-            />
-          ),
-        )}
-      </MarkdownBlockStack>
+      <MarkdownImageMenu draftKey={imageDraftKey} imageAttachments={imageAttachments}>
+        <MarkdownBlockStack imageSources={imageSources}>
+          {segments.map((segment) =>
+            segment.kind === "mermaid" ? (
+              <MermaidFence key={`${segment.kind}:${segment.id}`} code={segment.source} />
+            ) : (
+              <ThemedMarkdown
+                key={`${segment.kind}:${segment.id}`}
+                markdown={segment.source}
+                uniProps={compact ? compactStyle : regularStyle}
+                flavor="github"
+                selectable
+                md4cFlags={MD4C_FLAGS}
+                linkRecognition={linkRecognition}
+                enableTaskListItemToggle={false}
+                enableLinkPreview={false}
+                enableBlockContextMenu={false}
+                // JS reveal owns pacing; native fade animation is a separate experiment.
+                streamingAnimation={false}
+                onLinkPress={pressLink}
+                onImagePress={pressImage}
+                renderers={isWeb ? WEB_RENDERERS : undefined}
+              />
+            ),
+          )}
+        </MarkdownBlockStack>
+      </MarkdownImageMenu>
       {image ? <AttachmentLightbox source={image} onClose={closeImage} /> : null}
     </MermaidStreamingContext.Provider>
   );

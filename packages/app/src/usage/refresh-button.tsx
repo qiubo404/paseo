@@ -13,14 +13,22 @@ const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
  * Refreshes every report on the host; spins while a refresh is in flight. On compact it sits in the
  * header's island, so its highlight is round.
  */
-export function UsageRefreshButton({ busy, onRefresh }: { busy: boolean; onRefresh: () => void }) {
+export function UsageRefreshButton({
+  busy,
+  disabled = false,
+  onRefresh,
+}: {
+  busy: boolean;
+  disabled?: boolean;
+  onRefresh: () => void;
+}) {
   const compact = useIsCompactFormFactor();
   const iconSize = paneContentToolbarIconSize(compact);
   return (
     <ToolbarButton
       label={usageCopy.refreshAll}
       compact={compact}
-      disabled={busy}
+      disabled={busy || disabled}
       onPress={onRefresh}
       testID="usage-refresh-all"
     >

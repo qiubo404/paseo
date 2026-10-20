@@ -39,6 +39,35 @@ function createUpdater(
 }
 
 describe("desktop app updater — check", () => {
+  it("announces a notification-only release immediately and refuses install requests", async () => {
+    const { updater, port } = createUpdater();
+    port.nextCheckResult(
+      buildFakeCheckResult({
+        notificationOnly: true,
+        hasUpdate: true,
+        readyToInstall: false,
+        latestVersion: "0.13.0",
+      }),
+    );
+    await updater.checkForUpdates({ releaseChannel: "stable", intent: "automatic", silent: true });
+    expect(updater.getSnapshot()).toMatchObject({
+      notificationOnly: true,
+      status: "available",
+      availableUpdate: { latestVersion: "0.13.0" },
+    });
+    expect(await updater.installUpdate({ releaseChannel: "stable" })).toBeNull();
+    expect(port.recordedInstalls).toEqual([]);
+    expect(
+      formatStatusText({
+        status: "available",
+        availableUpdate: updater.getSnapshot().availableUpdate,
+        installMessage: null,
+        lastCheckedAt: null,
+        formatVersion: (value) => `v${value}`,
+        formatLastCheckedAt: String,
+      }),
+    ).toBe("Official release v0.13.0 is available.");
+  });
   it("forwards manual check intent and the requested release channel to the port", async () => {
     const { updater, port } = createUpdater();
     port.nextCheckResult(buildFakeCheckResult());

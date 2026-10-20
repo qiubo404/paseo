@@ -4,6 +4,7 @@ import { isWeb } from "@/constants/platform";
 import { i18n } from "@/i18n/i18next";
 
 export interface DesktopAppUpdateCheckResult {
+  notificationOnly?: boolean;
   hasUpdate: boolean;
   readyToInstall: boolean;
   currentVersion: string | null;
@@ -116,6 +117,7 @@ export async function checkDesktopAppUpdate({
   }
 
   return {
+    ...(result.notificationOnly === true ? { notificationOnly: true } : {}),
     hasUpdate: result.hasUpdate === true,
     readyToInstall: result.readyToInstall === true,
     currentVersion: toStringOrNull(result.currentVersion),

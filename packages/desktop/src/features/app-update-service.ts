@@ -6,6 +6,7 @@ import {
 } from "./app-update-rollout.js";
 
 export interface AppUpdateCheckResult {
+  notificationOnly?: boolean;
   hasUpdate: boolean;
   readyToInstall: boolean;
   currentVersion: string;

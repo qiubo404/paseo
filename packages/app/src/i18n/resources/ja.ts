@@ -154,6 +154,13 @@ export const ja: TranslationResources = {
       dictation: "音声入力",
       interruptBeforeVoice: "音声モードを開始する前にエージェントを中断してください",
     },
+    imageReview: {
+      commentNumber: "コメント {{number}}",
+      comment: "コメントを追加",
+      hint: "画像をクリックしてコメントを追加。ドラッグで移動、スクロールで拡大縮小。",
+      delete: "削除",
+      done: "完了",
+    },
     attachments: {
       addImage: "画像を追加",
       pasteImage: "画像を貼り付け",
@@ -322,6 +329,14 @@ export const ja: TranslationResources = {
     },
   },
   message: {
+    imageCopy: "画像をコピー",
+    imageCopying: "画像をコピー中...",
+    imageCopied: "画像をコピーしました",
+    imageCopyFailed: "画像をコピーできません：{{reason}}",
+    imageAddToChat: "チャット入力欄に追加",
+    imageAddingToChat: "画像を追加中...",
+    imageAddFailed: "画像を追加できません：{{reason}}",
+    imageAddInvalid: "画像データを利用できません",
     diagram: {
       diagram: "図",
       zoomIn: "拡大",
@@ -1163,6 +1178,8 @@ export const ja: TranslationResources = {
     },
   },
   sidebar: {
+    usageHost: "サイドバーの使用状況ホスト",
+    refreshUsage: "現在のチャットの使用量を更新",
     statusGroupAccessibility: "{{label}} グループ",
     statusBucket: {
       needsInput: "入力待ち",
@@ -1448,7 +1465,10 @@ export const ja: TranslationResources = {
       loadFailed: "デスクトップデーモンのステータスを読み込めません。",
     },
     updates: {
+      notificationOnly:
+        "Paseo Review は公式リリースの通知のみを行います。公式の変更をマージし、カスタムアプリを再ビルドして更新してください。",
       status: {
+        officialReleaseAvailable: "公式バージョン {{version}} が公開されました。",
         checking: "アプリの更新を確認中...",
         installing: "アプリの更新をインストール中...",
         upToDate: "アプリは最新です。",
@@ -1469,6 +1489,7 @@ export const ja: TranslationResources = {
       },
       installError: "デスクトップアプリの更新をインストールできません。",
       callout: {
+        officialReleaseTitle: "新しい公式リリース",
         installingTitle: "更新をインストール中",
         failedTitle: "更新に失敗しました",
         availableTitle: "更新が利用可能",

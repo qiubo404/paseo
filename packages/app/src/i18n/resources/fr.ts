@@ -155,6 +155,13 @@ export const fr: TranslationResources = {
       dictation: "Dictée",
       interruptBeforeVoice: "Interrompez l’agent avant de démarrer le mode vocal",
     },
+    imageReview: {
+      commentNumber: "Commentaire {{number}}",
+      comment: "Ajouter un commentaire",
+      hint: "Cliquez pour commenter. Faites glisser pour déplacer et défiler pour zoomer.",
+      delete: "Supprimer",
+      done: "Terminé",
+    },
     attachments: {
       addImage: "Ajouter une image",
       pasteImage: "Coller une image",
@@ -322,6 +329,14 @@ export const fr: TranslationResources = {
     },
   },
   message: {
+    imageCopy: "Copier l’image",
+    imageCopying: "Copie de l’image...",
+    imageCopied: "Image copiée",
+    imageCopyFailed: "Impossible de copier l’image : {{reason}}",
+    imageAddToChat: "Ajouter au champ de discussion",
+    imageAddingToChat: "Ajout de l’image...",
+    imageAddFailed: "Impossible d’ajouter l’image : {{reason}}",
+    imageAddInvalid: "Les données de l’image sont indisponibles",
     diagram: {
       diagram: "Diagramme",
       zoomIn: "Zoomer",
@@ -1179,6 +1194,8 @@ export const fr: TranslationResources = {
     },
   },
   sidebar: {
+    usageHost: "Hôte d’utilisation de la barre latérale",
+    refreshUsage: "Actualiser l’utilisation du chat actuel",
     statusGroupAccessibility: "Groupe {{label}}",
     statusBucket: {
       needsInput: "Attend une réponse",
@@ -1464,7 +1481,10 @@ export const fr: TranslationResources = {
       loadFailed: "Impossible de charger le statut du daemon de l’application de bureau.",
     },
     updates: {
+      notificationOnly:
+        "Paseo Review signale uniquement les versions officielles. Fusionnez les changements officiels et recompilez cette application personnalisée.",
       status: {
+        officialReleaseAvailable: "La version officielle {{version}} est disponible.",
         checking: "Recherche de mises à jour de l’application…",
         installing: "Installation de la mise à jour de l’application…",
         upToDate: "L’application est à jour.",
@@ -1487,6 +1507,7 @@ export const fr: TranslationResources = {
       },
       installError: "Impossible d’installer la mise à jour de l’application de bureau.",
       callout: {
+        officialReleaseTitle: "Nouvelle version officielle",
         installingTitle: "Installation de la mise à jour",
         failedTitle: "Échec de la mise à jour",
         availableTitle: "Mise à jour disponible",

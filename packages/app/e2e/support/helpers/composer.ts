@@ -209,13 +209,16 @@ export async function expectGithubAttachmentPill(
 }
 
 export async function openImageLightbox(page: Page): Promise<void> {
-  await page.getByRole("button", { name: "Open image attachment" }).first().click();
-  await expect(page.getByTestId("attachment-lightbox-close")).toBeVisible({ timeout: 5_000 });
+  await page.getByTestId("composer-image-attachment-pill").first().click();
+  await expect(
+    page.getByTestId("attachment-lightbox-close").or(page.getByTestId("image-review-done")),
+  ).toBeVisible({ timeout: 5_000 });
+  await expect(page.getByTestId("attachment-lightbox-canvas")).toBeVisible({ timeout: 5_000 });
 }
 
 export async function closeImageLightbox(page: Page): Promise<void> {
   await page.keyboard.press("Escape");
-  await expect(page.getByTestId("attachment-lightbox-close")).not.toBeVisible({ timeout: 5_000 });
+  await expect(page.getByTestId("attachment-lightbox")).not.toBeVisible({ timeout: 5_000 });
 }
 
 export async function openGithubPickerFromMenu(page: Page): Promise<void> {

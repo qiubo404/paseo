@@ -1055,7 +1055,14 @@ function DesktopAgentControlsContent(props: DesktopAgentControlsContentProps) {
         </>
       ) : null}
 
-      {modeControl ? <AgentModeControl {...modeControl} onClose={onDropdownClose} /> : null}
+      {modeControl ? (
+        <AgentModeControl
+          {...modeControl}
+          features={features}
+          onSetFeature={onSetFeature}
+          onClose={onDropdownClose}
+        />
+      ) : null}
 
       {presentation.aggregateFeatures && features?.length ? (
         <>
@@ -1236,7 +1243,14 @@ function SheetAgentControlsContent(props: SheetAgentControlsContentProps) {
         </>
       ) : null}
 
-      {modeControl ? <AgentModeControl {...modeControl} surface="sheet" /> : null}
+      {modeControl ? (
+        <AgentModeControl
+          {...modeControl}
+          features={features}
+          onSetFeature={onSetFeature}
+          surface="sheet"
+        />
+      ) : null}
 
       {(features ?? []).map((feature) => (
         <SheetFeatureItem

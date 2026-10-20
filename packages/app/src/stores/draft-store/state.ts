@@ -1,3 +1,4 @@
+import { ImageReviewCommentsSchema } from "@/attachments/image-review";
 import {
   NEW_WORKSPACE_PICKER_ATTACHMENT_OWNER,
   type AttachmentMetadata,
@@ -30,6 +31,27 @@ export interface DraftRecord {
   lifecycle: DraftLifecycleState;
   updatedAt: number;
   version: number;
+}
+
+export function appendDraftImage(
+  record: DraftRecord | undefined,
+  metadata: AttachmentMetadata,
+  now: number,
+): DraftRecord {
+  const input = record?.lifecycle === "active" ? record.input : { text: "", attachments: [] };
+  if (
+    record &&
+    input.attachments.some(
+      (attachment) => attachment.kind === "image" && attachment.metadata.id === metadata.id,
+    )
+  )
+    return record;
+  return {
+    input: { ...input, attachments: [...input.attachments, { kind: "image", metadata }] },
+    lifecycle: "active",
+    updatedAt: now,
+    version: (record?.version ?? 0) + 1,
+  };
 }
 
 export function editDraftRecordText(
@@ -94,7 +116,11 @@ const ChangeRequestItemSchema = z.strictObject({
 export const UserComposerAttachmentSchema: z.ZodType<UserComposerAttachment> = z.discriminatedUnion(
   "kind",
   [
-    z.strictObject({ kind: z.literal("image"), metadata: AttachmentMetadataSchema }),
+    z.strictObject({
+      kind: z.literal("image"),
+      metadata: AttachmentMetadataSchema,
+      comments: ImageReviewCommentsSchema.optional(),
+    }),
     z.strictObject({ kind: z.literal("file"), attachment: UploadedFileSchema }),
     z.strictObject({
       kind: z.literal("workspace_file"),
@@ -171,6 +197,7 @@ export function normalizeComposerAttachment(
     return {
       kind: "image",
       metadata: normalizeAttachmentMetadata(attachment.metadata),
+      ...(attachment.comments ? { comments: attachment.comments } : {}),
     };
   }
   if (attachment.kind === "workspace_file") {

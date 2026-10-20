@@ -1,3 +1,4 @@
+import { splitComposerAttachmentsForSubmit } from "./attachments/submit";
 import { describe, expect, it, vi } from "vitest";
 import type { AgentAttachment, ForgeSearchItem } from "@getpaseo/protocol/messages";
 import type {
@@ -1122,4 +1123,51 @@ describe("file upload preparation", () => {
       expect(sends).toBe(0);
     },
   );
+});
+
+it("preserves image review comments through queue editing and failed-send retry", async () => {
+  const reviewed: UserComposerAttachment = {
+    kind: "image",
+    metadata: imageWithId("review-queue"),
+    comments: [{ id: "review-one", x: 0.25, y: 0.75, text: "Adjust padding" }],
+  };
+  const queue = createFakeQueue();
+  const queued = queueComposerMessage({
+    agentId: "agent",
+    text: "Review",
+    attachments: [reviewed],
+    queue,
+  }).queued;
+  if (!queued) throw new Error("Expected a queued image review");
+  const edited = editQueuedComposerMessage({ agentId: "agent", messageId: queued.id, queue });
+  expect(edited).toEqual({ text: "Review", attachments: [reviewed] });
+  const next = queueComposerMessage({
+    agentId: "agent",
+    text: "Review",
+    attachments: [reviewed],
+    queue,
+  }).queued;
+  if (!next) throw new Error("Expected a queued image review");
+  const failed = await sendQueuedComposerMessageNow({
+    agentId: "agent",
+    messageId: next.id,
+    queue,
+    submitMessage: async () => {
+      throw new Error("offline");
+    },
+  });
+  expect(failed).toEqual({ status: "failed", errorMessage: "offline" });
+  expect(queue.state.get("agent")?.[0]?.attachments).toEqual([reviewed]);
+  const delivered: ReturnType<typeof splitComposerAttachmentsForSubmit>[] = [];
+  await sendQueuedComposerMessageNow({
+    agentId: "agent",
+    messageId: next.id,
+    queue,
+    submitMessage: async ({ attachments }) => {
+      delivered.push(splitComposerAttachmentsForSubmit(attachments));
+    },
+  });
+  expect(delivered).toEqual([splitComposerAttachmentsForSubmit([reviewed])]);
+  expect(delivered[0].attachments).toHaveLength(1);
+  expect(queue.state.get("agent")).toEqual([]);
 });

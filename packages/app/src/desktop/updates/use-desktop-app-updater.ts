@@ -21,6 +21,7 @@ import { formatMessageTimestamp } from "@/utils/time";
 export type { DesktopAppUpdateStatus };
 
 export interface UseDesktopAppUpdaterReturn {
+  notificationOnly: boolean | null;
   isDesktopApp: boolean;
   status: DesktopAppUpdateStatus;
   statusText: string;
@@ -104,6 +105,7 @@ export function useDesktopAppUpdater(): UseDesktopAppUpdaterReturn {
   }, [checkForUpdates, isDesktopApp, snapshot.status]);
 
   return {
+    notificationOnly: snapshot.notificationOnly,
     isDesktopApp,
     status: snapshot.status,
     statusText: formatStatusText({

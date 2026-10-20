@@ -1,3 +1,6 @@
+import { openAgentRoute } from "../support/helpers/mock-agent";
+import { loadSessionMessageReaders } from "../support/helpers/new-workspace";
+import type { SessionInboundMessage } from "@getpaseo/protocol/messages";
 import { expect, test } from "../support/fixtures";
 import { clickNewChat } from "../support/helpers/launcher";
 import { expectComposerVisible } from "../support/helpers/composer";
@@ -309,4 +312,213 @@ test.describe("Composer attachments", () => {
       await workspace.cleanup();
     }
   });
+});
+
+test("image review saves, restores, edits and sends comments with the original image", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(120_000);
+  const workspace = await seedWorkspace({ repoPrefix: "image-review-", git: false });
+  try {
+    const agent = await workspace.client.createAgent({
+      provider: "mock",
+      cwd: workspace.repoPath,
+      workspaceId: workspace.workspaceId,
+      model: "e2e-fast-stream",
+      featureValues: { mockPromptRejections: 1 },
+    });
+    const frames = await loadSessionMessageReaders();
+    const sent: Array<Extract<SessionInboundMessage, { type: "send_agent_message_request" }>> = [];
+    page.on("websocket", (socket) =>
+      socket.on("framesent", ({ payload }) => {
+        const message = frames.client(payload);
+        if (message?.type === "send_agent_message_request") sent.push(message);
+      }),
+    );
+    await openAgentRoute(page, { workspaceId: workspace.workspaceId, agentId: agent.id });
+    await expectComposerVisible(page);
+    await page.setViewportSize({ width: 1280, height: 1000 });
+    await attachImageFromMenu(page, TEST_IMAGE);
+    await openImageLightbox(page);
+    const image = page.getByTestId("attachment-lightbox-image");
+    const done = page.getByTestId("image-review-done");
+    await expect
+      .poll(async () => {
+        const picture = await image.boundingBox();
+        const button = await done.boundingBox();
+        return picture && button ? button.x - picture.x - picture.width : Infinity;
+      })
+      .toBeLessThanOrEqual(24);
+    await expect(page.getByTestId("image-review-controls")).toHaveCount(0);
+    await expect(page.getByTestId("image-review-comment")).toHaveCount(0);
+    const imageBounds = await image.boundingBox();
+    const doneBounds = await done.boundingBox();
+    if (!imageBounds || !doneBounds) throw new Error("Missing image review controls geometry");
+    expect(doneBounds.x).toBeGreaterThan(imageBounds.x + imageBounds.width);
+    expect(doneBounds.x - imageBounds.x - imageBounds.width).toBeGreaterThanOrEqual(12);
+    expect(doneBounds.y).toBeLessThan(imageBounds.y + 64);
+    expect(imageBounds.x + imageBounds.width / 2).toBeCloseTo(1280 / 2, 0);
+    expect(imageBounds.y + imageBounds.height / 2).toBeCloseTo(1000 / 2, 0);
+    expect(imageBounds.height).toBeGreaterThan(900);
+    expect(imageBounds.y).toBeGreaterThanOrEqual(32);
+    expect(1000 - imageBounds.y - imageBounds.height).toBeGreaterThanOrEqual(32);
+    await image.click({ position: { x: 160, y: 160 } });
+    const editor = page.getByTestId("image-review-comment");
+    const popup = await page.getByTestId("image-review-editor").boundingBox();
+    if (!popup) throw new Error("Missing floating comment editor");
+    expect(popup.y).toBeLessThan(imageBounds.y + imageBounds.height);
+    await editor.fill("Remove this label");
+    const save = page.getByTestId("image-review-save");
+    await expect(save).toHaveText("↑");
+    const arrowBounds = await save.boundingBox();
+    const compactEditor = await page.getByTestId("image-review-editor").boundingBox();
+    if (!arrowBounds || !compactEditor) throw new Error("Missing compact annotation controls");
+    expect(arrowBounds.width).toBe(28);
+    expect(arrowBounds.height).toBe(28);
+    expect(compactEditor.height).toBeLessThan(80);
+    await expect(page.getByTestId("image-review-delete")).toHaveCount(0);
+    await save.click();
+    await expect(page.getByTestId("image-review-pin-1")).toBeVisible();
+    await page.getByTestId("image-review-done").click();
+    await expect(page.getByRole("textbox", { name: "Message agent..." }).first()).toBeFocused();
+    await expect(page.getByTestId("image-review-count")).toHaveText("1");
+    await page.reload();
+    await expectComposerVisible(page);
+    await openImageLightbox(page);
+    await page.getByTestId("image-review-pin-1").click();
+    await expect(editor).toHaveValue("Remove this label");
+    await editor.fill("删除多余文字");
+    await editor.dispatchEvent("keydown", { key: "Enter", keyCode: 229, isComposing: true });
+    await expect(editor).toBeVisible();
+    await editor.press("Shift+Enter");
+    await editor.pressSequentially("Keep spacing");
+    await expect(editor).toHaveValue("删除多余文字\nKeep spacing");
+    // Closing the preview commits a nonempty editor without a separate save click.
+    await page.getByTestId("image-review-done").click();
+    await openImageLightbox(page);
+    await page.getByTestId("image-review-pin-1").click();
+    await expect(editor).toHaveValue("删除多余文字\nKeep spacing");
+    await editor.press("Enter");
+    const currentImage = await image.boundingBox();
+    if (!currentImage) throw new Error("Missing image after restoring comments");
+    await image.click({ position: { x: currentImage.width - 40, y: currentImage.height - 40 } });
+    await editor.fill("Temporary comment");
+    const edgeEditor = await page.getByTestId("image-review-editor").boundingBox();
+    const edgeCanvas = await page.getByTestId("attachment-lightbox-canvas").boundingBox();
+    if (!edgeEditor || !edgeCanvas) throw new Error("Missing annotation near the image edge");
+    expect(edgeEditor.x + edgeEditor.width).toBeLessThanOrEqual(edgeCanvas.x + edgeCanvas.width);
+    expect(edgeEditor.y + edgeEditor.height).toBeLessThanOrEqual(edgeCanvas.y + edgeCanvas.height);
+    await editor.press("Enter");
+    await page.getByTestId("image-review-pin-2").click({ button: "right" });
+    await page.getByTestId("image-review-delete").click();
+    await expect(page.getByTestId("image-review-pin-2")).toHaveCount(0);
+    const initialBounds = await image.boundingBox();
+    const initialPin = await page.getByTestId("image-review-pin-1").boundingBox();
+    if (!initialBounds || !initialPin) throw new Error("Missing image review geometry");
+    const relativeX = (initialPin.x - initialBounds.x) / initialBounds.width;
+    const relativeY = (initialPin.y + initialPin.height - initialBounds.y) / initialBounds.height;
+    await image.hover();
+    await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+    const zoomedBounds = await image.boundingBox();
+    const zoomedPin = await page.getByTestId("image-review-pin-1").boundingBox();
+    if (!zoomedBounds || !zoomedPin) throw new Error("Missing zoomed image review geometry");
+    expect(zoomedBounds.width).toBeGreaterThan(initialBounds.width);
+    expect(zoomedPin.width).toBeCloseTo(initialPin.width, 3);
+    expect((zoomedPin.x - zoomedBounds.x) / zoomedBounds.width).toBeCloseTo(relativeX, 3);
+    expect((zoomedPin.y + zoomedPin.height - zoomedBounds.y) / zoomedBounds.height).toBeCloseTo(
+      relativeY,
+      3,
+    );
+    const zoomedDone = await done.boundingBox();
+    const canvas = await page.getByTestId("attachment-lightbox-canvas").boundingBox();
+    if (!zoomedDone || !canvas) throw new Error("Missing zoomed review controls");
+    expect(zoomedDone.x).toBeGreaterThanOrEqual(canvas.x + canvas.width);
+    await page.mouse.move(640, 300);
+    await page.mouse.down();
+    await page.mouse.move(660, 320, { steps: 5 });
+    await page.mouse.up();
+    await expect(editor).not.toBeVisible();
+    await expect(page.getByTestId("image-review-pin-2")).toHaveCount(0);
+    await page.setViewportSize({ width: 1000, height: 800 });
+    await expect
+      .poll(async () => {
+        const picture = await image.boundingBox();
+        const button = await done.boundingBox();
+        return picture && button ? Math.abs(button.x - picture.x - picture.width - 20) : Infinity;
+      })
+      .toBeLessThan(1);
+    const resizedImage = await image.boundingBox();
+    const resizedPin = await page.getByTestId("image-review-pin-1").boundingBox();
+    if (!resizedImage || !resizedPin) throw new Error("Missing resized review geometry");
+    expect(resizedImage.x + resizedImage.width / 2).toBeCloseTo(1000 / 2, 0);
+    expect(resizedImage.y + resizedImage.height / 2).toBeCloseTo(800 / 2, 0);
+    expect(resizedImage.y).toBeGreaterThanOrEqual(32);
+    expect(800 - resizedImage.y - resizedImage.height).toBeGreaterThanOrEqual(32);
+    expect((resizedPin.x - resizedImage.x) / resizedImage.width).toBeCloseTo(relativeX, 3);
+    expect((resizedPin.y + resizedPin.height - resizedImage.y) / resizedImage.height).toBeCloseTo(
+      relativeY,
+      3,
+    );
+    await page.screenshot({ path: testInfo.outputPath("image-review.png") });
+    await page.getByTestId("image-review-done").click();
+    await fillComposerDraft(page, "Apply the image review");
+    await page.getByRole("textbox", { name: "Message agent..." }).first().press("Enter");
+    await expect.poll(() => sent.length).toBe(1);
+    await expect(
+      page.getByRole("alert").filter({ hasText: "Requested mock prompt rejection" }),
+    ).toBeVisible();
+    await expect(page.getByTestId("image-review-count")).toHaveText("1");
+    await expectComposerDraft(page, "Apply the image review");
+    await page.getByRole("textbox", { name: "Message agent..." }).first().press("Enter");
+    await expect.poll(() => sent.length).toBe(2);
+    expect(sent[1].attachments).toEqual(sent[0].attachments);
+    expect(sent[1].images).toEqual(sent[0].images);
+
+    expect(sent[0].images).toHaveLength(1);
+    expect(sent[0].attachments).toEqual([
+      expect.objectContaining({
+        type: "text",
+        title: "截图 1 评审：test.png",
+        text: expect.stringMatching(
+          /^截图 1（test\.png）\n\n1\. 删除多余文字\nKeep spacing（位置：x [\d.]+%，y [\d.]+%）$/,
+        ),
+      }),
+    ]);
+    await expect(page.getByTestId("composer-image-attachment-pill")).toHaveCount(0);
+    await workspace.client.waitForFinish(agent.id, 30_000);
+    await expectComposerEditable(page);
+    const landscape = await page.evaluate(() => {
+      const fixtureCanvas = document.createElement("canvas");
+      fixtureCanvas.width = 1600;
+      fixtureCanvas.height = 400;
+      const context = fixtureCanvas.getContext("2d");
+      if (!context) throw new Error("Missing canvas context");
+      context.fillStyle = "#2468ac";
+      context.fillRect(0, 0, fixtureCanvas.width, fixtureCanvas.height);
+      return fixtureCanvas.toDataURL("image/png").split(",")[1];
+    });
+    await attachImageFromMenu(page, {
+      name: "landscape.png",
+      mimeType: "image/png",
+      buffer: Buffer.from(landscape, "base64"),
+    });
+    await openImageLightbox(page);
+    await expect
+      .poll(async () => {
+        const picture = await image.boundingBox();
+        const button = await done.boundingBox();
+        return picture && button ? Math.abs(button.y - picture.y - 4) : Infinity;
+      })
+      .toBeLessThan(1);
+    const landscapeBounds = await image.boundingBox();
+    const landscapeDone = await done.boundingBox();
+    if (!landscapeBounds || !landscapeDone) throw new Error("Missing landscape preview geometry");
+    expect(landscapeDone.x - landscapeBounds.x - landscapeBounds.width).toBeCloseTo(20, 1);
+    expect(landscapeBounds.x + landscapeBounds.width / 2).toBeCloseTo(1000 / 2, 0);
+    expect(landscapeBounds.y + landscapeBounds.height / 2).toBeCloseTo(800 / 2, 0);
+    expect(landscapeBounds.y).toBeGreaterThan(200);
+    await done.click();
+  } finally {
+    await workspace.cleanup();
+  }
 });

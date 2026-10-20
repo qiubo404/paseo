@@ -679,7 +679,7 @@ function buildInitialState(snapshot: ScheduleFormSnapshot): ScheduleFormState {
     modelSelectorProviders: [],
     modeOptions: [],
     availableThinkingOptions: [],
-    archiveOnFinish: config?.archiveOnFinish ?? true,
+    archiveOnFinish: config?.archiveOnFinish ?? false,
     isolation: resolveInitialIsolation({ config, preferences: snapshot.defaults.preferences }),
     effectiveIsolation: "local",
     submitArchiveOnFinish: undefined,

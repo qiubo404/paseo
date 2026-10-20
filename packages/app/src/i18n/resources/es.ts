@@ -154,6 +154,13 @@ export const es: TranslationResources = {
       dictation: "Dictado",
       interruptBeforeVoice: "Interrumpir al agente antes de iniciar el modo de voz.",
     },
+    imageReview: {
+      commentNumber: "Comentario {{number}}",
+      comment: "Añadir comentario",
+      hint: "Haz clic para comentar. Arrastra para mover y desplázate para ampliar.",
+      delete: "Eliminar",
+      done: "Listo",
+    },
     attachments: {
       addImage: "Agregar imagen",
       pasteImage: "Pegar imagen",
@@ -322,6 +329,14 @@ export const es: TranslationResources = {
     },
   },
   message: {
+    imageCopy: "Copiar imagen",
+    imageCopying: "Copiando imagen...",
+    imageCopied: "Imagen copiada",
+    imageCopyFailed: "No se pudo copiar la imagen: {{reason}}",
+    imageAddToChat: "Añadir al chat",
+    imageAddingToChat: "Añadiendo imagen...",
+    imageAddFailed: "No se pudo añadir la imagen: {{reason}}",
+    imageAddInvalid: "Los datos de la imagen no están disponibles",
     diagram: {
       diagram: "Diagrama",
       zoomIn: "Acercar",
@@ -1186,6 +1201,8 @@ export const es: TranslationResources = {
     },
   },
   sidebar: {
+    usageHost: "Servidor de uso de la barra lateral",
+    refreshUsage: "Actualizar uso del chat actual",
     statusGroupAccessibility: "Grupo {{label}}",
     statusBucket: {
       needsInput: "Necesita datos",
@@ -1470,7 +1487,10 @@ export const es: TranslationResources = {
       loadFailed: "No se puede cargar el estado del demonio del escritorio.",
     },
     updates: {
+      notificationOnly:
+        "Paseo Review solo avisa de versiones oficiales. Integra los cambios oficiales y vuelve a compilar la aplicación personalizada.",
       status: {
+        officialReleaseAvailable: "La versión oficial {{version}} está disponible.",
         checking: "Buscando actualizaciones de la aplicación...",
         installing: "Instalando actualización de la aplicación...",
         upToDate: "La aplicación está actualizada.",
@@ -1493,6 +1513,7 @@ export const es: TranslationResources = {
       },
       installError: "No se puede instalar la actualización de la aplicación de escritorio.",
       callout: {
+        officialReleaseTitle: "Nueva versión oficial",
         installingTitle: "Instalando actualización",
         failedTitle: "La actualización falló",
         availableTitle: "Actualización disponible",

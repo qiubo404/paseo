@@ -4,7 +4,7 @@ import { StyleSheet } from "react-native-unistyles";
 import {
   FIT_TRANSFORM,
   fitContentSize,
-  isPointInsideTransformedContent,
+  normalizedContentPoint,
   panContent,
   zoomContentAtPoint,
   type ViewportPoint,
@@ -52,6 +52,9 @@ export function ZoomableViewport({
   maxScale = DEFAULT_MAX_SCALE,
   minScale = DEFAULT_MIN_SCALE,
   onPressOutsideContent,
+  onContentPress,
+  renderOverlay,
+  toolbarPlacement = "top",
   style,
   testID,
   wheelActivation = "modifier",
@@ -141,6 +144,7 @@ export function ZoomableViewport({
   }, [wheelActivation, zoomAt]);
 
   const beginPointer = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.target instanceof Element && event.target.closest("[role=button]")) return;
     if (event.pointerType === "mouse" && event.button !== 0) return;
     if (event.pointerType !== "mouse") setHasTouchInput(true);
     if (pointersRef.current.size === 0) suppressClickRef.current = false;
@@ -246,17 +250,18 @@ export function ZoomableViewport({
         suppressClickRef.current = false;
         return;
       }
-      if (!fittedContent || !viewport || !onPressOutsideContent) return;
+      if (!fittedContent || !viewport) return;
       const bounds = event.currentTarget.getBoundingClientRect();
-      const isInside = isPointInsideTransformedContent({
+      const point = normalizedContentPoint({
         point: { x: event.clientX - bounds.left, y: event.clientY - bounds.top },
         transform: transformRef.current,
         fittedContent,
         viewport,
       });
-      if (!isInside) onPressOutsideContent();
+      if (point) onContentPress?.(point);
+      else onPressOutsideContent?.();
     },
-    [fittedContent, onPressOutsideContent, viewport],
+    [fittedContent, onContentPress, onPressOutsideContent, viewport],
   );
 
   const renderedCanvasStyle = useMemo<React.CSSProperties>(() => {
@@ -267,6 +272,7 @@ export function ZoomableViewport({
   const renderedContentStyle = useMemo<React.CSSProperties>(
     () => ({
       ...contentDomStyle,
+      position: "relative",
       width: fittedContent?.width ?? 0,
       height: fittedContent?.height ?? 0,
       transform: `translate3d(${transform.x}px, ${transform.y}px, 0) scale(${transform.scale})`,
@@ -300,12 +306,23 @@ export function ZoomableViewport({
       >
         <div style={renderedContentStyle}>{children}</div>
       </div>
+      {viewport && fittedContent
+        ? renderOverlay?.({
+            viewport,
+            content: {
+              x: (viewport.width - fittedContent.width * transform.scale) / 2 + transform.x,
+              y: (viewport.height - fittedContent.height * transform.scale) / 2 + transform.y,
+              width: fittedContent.width * transform.scale,
+              height: fittedContent.height * transform.scale,
+            },
+          })
+        : null}
       <div
         onBlurCapture={handleBlur}
         onFocusCapture={handleFocus}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
-        style={toolbarDomStyle}
+        style={toolbarPlacement === "bottom" ? bottomToolbarDomStyle : toolbarDomStyle}
       >
         <ViewportToolbar
           actions={actions}
@@ -347,4 +364,10 @@ const toolbarDomStyle: React.CSSProperties = {
   width: 200,
   height: 48,
   zIndex: 1,
+  pointerEvents: "none",
+};
+const bottomToolbarDomStyle: React.CSSProperties = {
+  ...toolbarDomStyle,
+  top: "auto",
+  bottom: 0,
 };

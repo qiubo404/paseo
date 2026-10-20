@@ -15,6 +15,7 @@ import { useWorkspaceAttachmentsStore } from "@/attachments/workspace-attachment
 import {
   applyClearDraftRecord,
   editDraftRecordText,
+  appendDraftImage,
   collectReferencedAttachmentIdsFromState,
   DRAFT_STORE_VERSION,
   isAttachmentMetadata,
@@ -53,6 +54,7 @@ interface DraftStoreActions {
     draftKey: string;
     attachment: WorkspaceFileComposerAttachment;
   }) => Promise<void>;
+  attachImage: (input: { draftKey: string; metadata: AttachmentMetadata }) => Promise<void>;
   getCreateModalDraft: () => DraftInput | null;
   saveCreateModalDraft: (draft: DraftInput | null) => void;
   collectActiveAttachmentIds: () => string[];
@@ -371,6 +373,21 @@ export const useDraftStore = create<DraftStore>()(
           return { drafts: nextDrafts };
         });
 
+        scheduleAttachmentGc();
+      },
+
+      attachImage: async ({ draftKey, metadata }) => {
+        await get().hydrateDraftInput({ draftKey });
+        set((state) => ({
+          drafts: {
+            ...state.drafts,
+            [draftKey]: appendDraftImage(state.drafts[draftKey], metadata, Date.now()),
+          },
+          attachmentFocusRequestByDraftKey: {
+            ...state.attachmentFocusRequestByDraftKey,
+            [draftKey]: (state.attachmentFocusRequestByDraftKey[draftKey] ?? 0) + 1,
+          },
+        }));
         scheduleAttachmentGc();
       },
 

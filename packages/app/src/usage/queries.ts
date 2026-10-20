@@ -1,5 +1,5 @@
 import { supportsUsageReports } from "@getpaseo/client/internal/daemon-client";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   skipToken,
   useMutation,
@@ -8,7 +8,19 @@ import {
   type QueryKey,
 } from "@tanstack/react-query";
 import { useShallow } from "zustand/shallow";
-import { useFetchQuery } from "@/data/query";
+import { useFetchQueries, useFetchQuery } from "@/data/query";
+import { useDaemonConfig } from "@/hooks/use-daemon-config";
+import { useAppActivelyVisible } from "@/hooks/use-app-visible";
+import { getIsElectron } from "@/constants/platform";
+import { readDesktopSystemIdleTimeMs } from "@/desktop/electron/idle";
+import { invokeDesktopCommand } from "@/desktop/electron/invoke";
+import { useActiveWorkspaceSelection } from "@/stores/navigation-active-workspace-store";
+import { useUsageInSidebar } from "./in-sidebar";
+import {
+  createUsageRefreshScheduler,
+  usageRefreshTargetKey,
+  type UsageRefreshTarget,
+} from "./refresh-scheduler";
 import {
   getHostRuntimeStore,
   useHostRuntimeConnectionStatuses,
@@ -19,6 +31,7 @@ import { useSessionStore, type SessionState } from "@/stores/session-store";
 import { usageCopy } from "./copy";
 import {
   replaceReport,
+  enabledHostUsageReports,
   resolveAgentUsageView,
   resolveUsageRefresh,
   resolveUsageView,
@@ -154,7 +167,185 @@ export function useHostUsage(serverId: string): { view: UsageView; refresh: () =
   return { view, refresh };
 }
 
+/** All configured hosts, with independent requests and the same cache as their cards/sidebar. */
+export function useAllHostsUsage() {
+  const queryClient = useQueryClient();
+  const hosts = useUsageHosts();
+  const queries = useFetchQueries<UsageReportEntry[]>(
+    hosts.map((host) => ({
+      queryKey: usageReportsQueryKey(host.serverId),
+      queryFn: () => listReports(queryClient, host.serverId),
+      enabled: host.isConnected && host.supportsUsage,
+      // A removed/reordered host must never inherit another host's placeholder reports.
+      dataShape: "value",
+      staleTimeMs: REPORTS_STALE_TIME_MS,
+      retry: false,
+    })),
+  );
+  const refreshHost = useCallback(
+    (serverId: string) => {
+      void refreshReports(queryClient, serverId).catch(() => undefined);
+    },
+    [queryClient],
+  );
+  const reportingHosts = hosts.filter((host) => host.isConnected && host.supportsUsage);
+  const mutation = useMutation({
+    mutationFn: () =>
+      Promise.allSettled(reportingHosts.map((host) => refreshReports(queryClient, host.serverId))),
+  });
+  const groups = hosts.map((host, index) => {
+    const query = queries[index]!;
+    const view = resolveUsageView({
+      hostLabel: host.label,
+      isConnected: host.isConnected,
+      supportsUsage: host.supportsUsage,
+      query: toQueryState(query),
+    });
+    const errorMessage = query.error instanceof Error ? query.error.message : String(query.error);
+    return {
+      host,
+      view,
+      // Keep previous/streamed cards, but never present a failed refresh as fresh data.
+      refreshError: view.kind === "ready" && query.error ? errorMessage : null,
+    };
+  });
+  const { mutate } = mutation;
+  const refreshAll = useCallback(() => mutate(), [mutate]);
+  return {
+    groups,
+    refreshHost,
+    refreshAll,
+    isRefreshing: mutation.isPending || queries.some((query) => query.isFetching),
+    canRefresh: reportingHosts.length > 0,
+  };
+}
+
 const NO_REPORTS: UsageReportEntry[] = [];
+
+function sidebarUsageQueryKey(scope: UsageRefreshTarget) {
+  return scope.agentId
+    ? agentUsageQueryKey(scope.serverId, scope.agentId)
+    : usageReportsQueryKey(scope.serverId);
+}
+
+/** Mounted once by the sidebar root; its consumers share both the query and the timer. */
+export function useSidebarUsageQuery(fallbackServerId: string | null) {
+  const queryClient = useQueryClient();
+  const workspace = useActiveWorkspaceSelection();
+  const agentId = useSessionStore((state) => {
+    if (!workspace) return null;
+    const session = state.sessions[workspace.serverId];
+    const focused = session?.focusedAgentId;
+    return focused && session.agents.get(focused)?.workspaceId === workspace.workspaceId
+      ? focused
+      : null;
+  });
+  const serverId = workspace?.serverId;
+  const hasWorkspace = Boolean(workspace);
+  const focused = useMemo<UsageRefreshTarget | null>(
+    () => (serverId && agentId ? { serverId, agentId } : null),
+    [serverId, agentId],
+  );
+  const [lastChat, setLastChat] = useState<UsageRefreshTarget | null>(null);
+  useEffect(() => {
+    if (focused) setLastChat(focused);
+  }, [focused]);
+  const target = useMemo(
+    () => focused ?? lastChat ?? (fallbackServerId ? { serverId: fallbackServerId } : null),
+    [focused, lastChat, fallbackServerId],
+  );
+  const active = useAppActivelyVisible();
+  const { inSidebar } = useUsageInSidebar();
+  const canReport = useHostReportsUsage(target?.serverId ?? "");
+  const { config, isLoading: configLoading } = useDaemonConfig(target?.serverId ?? null);
+  const key = target ? usageRefreshTargetKey(target) : null;
+  const query = useFetchQuery<UsageReportEntry[]>({
+    queryKey: target ? sidebarUsageQueryKey(target) : ["usage", "sidebar", "none"],
+    queryFn: skipToken,
+    enabled: false,
+    dataShape: "value",
+    staleTimeMs: REPORTS_STALE_TIME_MS,
+    gcTime: 0,
+    retry: false,
+  });
+  const current = useRef({ key, active, inSidebar, canReport, focused, lastChat, hasWorkspace });
+  current.current = { key, active, inSidebar, canReport, focused, lastChat, hasWorkspace };
+  const requestedKey = useRef<string | null>(null);
+  const scheduler = useMemo(
+    () =>
+      createUsageRefreshScheduler({
+        now: Date.now,
+        readIdleMs: () =>
+          getIsElectron() ? readDesktopSystemIdleTimeMs(invokeDesktopCommand) : Promise.resolve(0),
+        canRefresh: (scope) => {
+          const state = current.current;
+          return Boolean(
+            state.key === usageRefreshTargetKey(scope) &&
+            state.active &&
+            state.inSidebar &&
+            state.canReport &&
+            (state.focused || (!state.lastChat && !state.hasWorkspace)),
+          );
+        },
+        updatedAt: (scope) =>
+          queryClient.getQueryState(sidebarUsageQueryKey(scope))?.dataUpdatedAt ?? 0,
+        fetch: (scope, forceRefresh) => {
+          requestedKey.current = usageRefreshTargetKey(scope);
+          return queryClient.fetchQuery({
+            queryKey: sidebarUsageQueryKey(scope),
+            queryFn: ({ signal }) =>
+              streamReports({
+                queryClient,
+                queryKey: sidebarUsageQueryKey(scope),
+                serverId: scope.serverId,
+                agentId: scope.agentId,
+                forceRefresh,
+                signal,
+              }),
+            staleTime: 0,
+            retry: false,
+          });
+        },
+      }),
+    [queryClient],
+  );
+  useEffect(() => {
+    if (!target || !active || !inSidebar || !canReport || (!focused && lastChat)) return;
+    const check = () => {
+      void scheduler
+        .refresh(target, { verifyAccount: requestedKey.current !== key })
+        .catch(() => undefined);
+    };
+    check();
+    // Also checks for resumed desktop activity, using local idle time rather than vendor requests.
+    if (!focused) return;
+    const timer = setInterval(check, 60_000);
+    return () => clearInterval(timer);
+  }, [target, key, active, inSidebar, canReport, focused, lastChat, hasWorkspace, scheduler]);
+  const refresh = useCallback(() => {
+    if (target && focused) void scheduler.refresh(target, { force: true }).catch(() => undefined);
+  }, [target, focused, scheduler]);
+  const reports = useMemo(
+    () =>
+      config ? enabledHostUsageReports(query.data ?? NO_REPORTS, config.providers) : NO_REPORTS,
+    [config, query.data],
+  );
+  const hostLabel = useHosts().find((host) => host.serverId === target?.serverId)?.label ?? "";
+  let error: string | null = null;
+  if (query.error) error = query.error instanceof Error ? query.error.message : String(query.error);
+  else if (!canReport && target) error = usageCopy.hostUnavailable(hostLabel);
+  else if (!config && !configLoading && target) error = usageCopy.settingsUnavailable;
+  return {
+    reports,
+    refresh,
+    busy: query.isFetching,
+    disabled: !focused || !canReport,
+    hasChat: Boolean(focused || lastChat),
+    loading: query.isFetching || configLoading,
+    label: hostLabel,
+    error,
+  };
+}
 
 /**
  * The reports of the sidebar's usage host, which is connected and reports usage; none until they
@@ -162,13 +353,18 @@ const NO_REPORTS: UsageReportEntry[] = [];
  */
 export function useUsageHostReports(serverId: string | null): UsageReportEntry[] {
   const queryClient = useQueryClient();
+  const { config } = useDaemonConfig(serverId);
   const query = useFetchQuery({
     queryKey: usageReportsQueryKey(serverId ?? ""),
     queryFn: serverId ? () => listReports(queryClient, serverId) : skipToken,
     dataShape: "list",
     staleTimeMs: REPORTS_STALE_TIME_MS,
   });
-  return query.data ?? NO_REPORTS;
+  return useMemo(
+    () =>
+      config ? enabledHostUsageReports(query.data ?? NO_REPORTS, config.providers) : NO_REPORTS,
+    [config, query.data],
+  );
 }
 
 /**

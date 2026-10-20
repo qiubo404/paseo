@@ -98,6 +98,38 @@ async function cycleNewWorkspaceMode(page: Page, presses: number): Promise<void>
 test.describe("New Workspace mode cycle safety", () => {
   test.describe.configure({ timeout: 240_000 });
 
+  test("Shift+Tab toggles Codex planning and preserves its permission mode", async ({ page }) => {
+    const seeded = await seedWorkspace({ repoPrefix: "plan-shortcut-" });
+    const modeRequests = await recordSetAgentModeRequests(page);
+    try {
+      const agent = await seeded.client.createAgent({
+        provider: "codex",
+        cwd: seeded.repoPath,
+        workspaceId: seeded.workspaceId,
+        title: "plan shortcut e2e",
+        modeId: "auto",
+        model: "gpt-5.4-mini",
+        featureValues: { plan_mode: false },
+      });
+      await openAgentRoute(page, { workspaceId: seeded.workspaceId, agentId: agent.id });
+      const mode = page.getByRole("button", { name: "Select agent mode (Default permissions)" });
+      const planIcon = page.getByTestId("agent-feature-plan_mode").locator("svg");
+      await expect(planIcon).toBeVisible();
+      const inactiveColor = await planIcon.getAttribute("stroke");
+      const composer = page.getByRole("textbox", { name: "Message agent..." });
+      await composer.click();
+      await page.keyboard.press("Shift+Tab");
+      await expect(planIcon).not.toHaveAttribute("stroke", inactiveColor!);
+      await expect(mode).toBeVisible();
+      await page.keyboard.press("Shift+Tab");
+      await expect(planIcon).toHaveAttribute("stroke", inactiveColor!);
+      await expect(mode).toBeVisible();
+      expect(modeRequests.requestsForAgent(agent.id)).toEqual([]);
+    } finally {
+      await seeded.cleanup();
+    }
+  });
+
   // Regression guard for the P1 safety bug: cycling the execution mode with Shift+Tab in
   // the New Workspace composer must never reach a backgrounded, still-mounted agent's mode
   // control and silently change that (possibly running) agent's mode — e.g. into a

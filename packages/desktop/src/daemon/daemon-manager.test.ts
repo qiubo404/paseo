@@ -4,7 +4,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DEFAULT_DESKTOP_SETTINGS } from "../settings/desktop-settings";
-import { createDaemonCommandHandlers } from "./daemon-manager";
+import { createDaemonCommandHandlers, normalizeVersion } from "./daemon-manager";
 
 const mocks = vi.hoisted(() => ({
   paseoHome: "",
@@ -98,7 +98,47 @@ describe("daemon-manager commands", () => {
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     rmSync(fixtureRoot, { recursive: true, force: true });
+  });
+
+  it("attaches to the shared daemon without starting or stopping it", async () => {
+    const sharedHome = path.join(fixtureRoot, "shared-host");
+    vi.stubEnv("PASEO_DESKTOP_DAEMON_HOME", sharedHome);
+    mkdirSync(sharedHome);
+    writeFileSync(
+      path.join(sharedHome, "paseo.pid"),
+      JSON.stringify({
+        pid: process.pid,
+        startedAt: new Date().toISOString(),
+        hostname: hostname(),
+        uid: process.getuid?.() ?? 0,
+        listen: "127.0.0.1:6799",
+        desktopManaged: true,
+      }),
+    );
+    mocks.runExternalCliJsonCommand.mockResolvedValue({
+      localDaemon: "running",
+      pid: process.pid,
+      listen: "127.0.0.1:6799",
+      serverId: "srv_shared",
+      daemonVersion: "1.2.3",
+      desktopManaged: true,
+    });
+    const handlers = createDaemonCommandHandlers();
+    const status = await handlers.start_desktop_daemon();
+    expect(status).toMatchObject({
+      home: sharedHome,
+      serverId: "srv_shared",
+      status: "running",
+      ownedByDesktop: false,
+    });
+    await handlers.stop_desktop_daemon({ reason: "quit" });
+    expect(mocks.createNodeEntrypointInvocation).not.toHaveBeenCalled();
+    expect(mocks.runExternalCliJsonCommand.mock.calls).toEqual([
+      [["daemon", "status", "--home", sharedHome, "--json"]],
+      [["daemon", "status", "--home", sharedHome, "--json"]],
+    ]);
   });
 
   it("returns the Electron main-process log tail from electron-log", () => {
@@ -175,4 +215,9 @@ describe("daemon-manager commands", () => {
     writeFileSync(lockPath, JSON.stringify({ ...lock, desktopManaged: false }));
     expect(await handler({ listen: "localhost:6799" })).toBeNull();
   });
+});
+
+it("compares a review build with its bundled daemon version without restarting it", () => {
+  expect(normalizeVersion("v0.12.0-review.1")).toBe(normalizeVersion("0.12.0"));
+  expect(normalizeVersion("0.12.0-beta.1")).toBe("0.12.0-beta.1");
 });

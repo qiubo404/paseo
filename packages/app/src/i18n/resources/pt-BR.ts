@@ -154,6 +154,13 @@ export const ptBR: TranslationResources = {
       dictation: "Ditado",
       interruptBeforeVoice: "Interrompa o agente antes de iniciar o modo de voz",
     },
+    imageReview: {
+      commentNumber: "Comentário {{number}}",
+      comment: "Adicionar comentário",
+      hint: "Clique para comentar. Arraste para mover e role para ampliar.",
+      delete: "Excluir",
+      done: "Concluído",
+    },
     attachments: {
       addImage: "Adicionar imagem",
       pasteImage: "Colar imagem",
@@ -321,6 +328,14 @@ export const ptBR: TranslationResources = {
     },
   },
   message: {
+    imageCopy: "Copiar imagem",
+    imageCopying: "Copiando imagem...",
+    imageCopied: "Imagem copiada",
+    imageCopyFailed: "Não foi possível copiar a imagem: {{reason}}",
+    imageAddToChat: "Adicionar ao chat",
+    imageAddingToChat: "Adicionando imagem...",
+    imageAddFailed: "Não foi possível adicionar a imagem: {{reason}}",
+    imageAddInvalid: "Os dados da imagem não estão disponíveis",
     diagram: {
       diagram: "Diagrama",
       zoomIn: "Aproximar",
@@ -1176,6 +1191,8 @@ export const ptBR: TranslationResources = {
     },
   },
   sidebar: {
+    usageHost: "Servidor de uso da barra lateral",
+    refreshUsage: "Atualizar uso da conversa atual",
     statusGroupAccessibility: "Grupo {{label}}",
     statusBucket: {
       needsInput: "Precisa de resposta",
@@ -1460,7 +1477,10 @@ export const ptBR: TranslationResources = {
       loadFailed: "Não foi possível carregar o status do daemon desktop.",
     },
     updates: {
+      notificationOnly:
+        "O Paseo Review apenas avisa sobre versões oficiais. Integre as alterações oficiais e recompile este aplicativo personalizado.",
       status: {
+        officialReleaseAvailable: "A versão oficial {{version}} está disponível.",
         checking: "Verificando atualizações do app...",
         installing: "Instalando atualização do app...",
         upToDate: "O app está atualizado.",
@@ -1483,6 +1503,7 @@ export const ptBR: TranslationResources = {
       },
       installError: "Não foi possível instalar a atualização do app desktop.",
       callout: {
+        officialReleaseTitle: "Nova versão oficial",
         installingTitle: "Instalando atualização",
         failedTitle: "Falha na atualização",
         availableTitle: "Atualização disponível",

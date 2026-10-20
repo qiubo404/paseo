@@ -2,6 +2,7 @@ import type { DesktopAppUpdateStatus } from "@/desktop/updates/use-desktop-app-u
 import { i18n } from "@/i18n/i18next";
 
 export type UpdateCalloutBody =
+  | { kind: "notice"; versionLabel: string | null }
   | { kind: "available"; versionLabel: string | null }
   | { kind: "installing" }
   | { kind: "error"; message: string };
@@ -28,6 +29,7 @@ export interface UpdateCalloutDescriptor {
 }
 
 export interface ResolveUpdateCalloutInput {
+  notificationOnly?: boolean;
   isDesktopApp: boolean;
   status: DesktopAppUpdateStatus;
   isInstalling: boolean;
@@ -54,6 +56,21 @@ export function resolveUpdateCalloutDescriptor(
 
   const latestVersion = input.availableUpdate?.latestVersion ?? null;
   const dismissalKey = `desktop-update:${input.status}:${latestVersion ?? "unknown"}`;
+
+  if (input.notificationOnly) {
+    if (!isAvailable) return null;
+    return {
+      id: "desktop-update",
+      dismissalKey,
+      priority: 200,
+      title: i18n.t("desktop.updates.callout.officialReleaseTitle"),
+      body: { kind: "notice", versionLabel: formatVersionLabel(latestVersion) },
+      showGiftIcon: true,
+      variant: "default",
+      actions: [],
+      testID: "update-callout",
+    };
+  }
 
   let title: string;
   let body: UpdateCalloutBody;

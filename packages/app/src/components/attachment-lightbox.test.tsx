@@ -48,6 +48,36 @@ const assistantImageSource: ImageLightboxSource = {
   uri: "blob:assistant-image",
 };
 
+vi.mock("@/components/ui/context-menu", () => {
+  const Container = ({ children }: React.PropsWithChildren) =>
+    React.createElement("div", null, children);
+  return {
+    ContextMenu: Container,
+    ContextMenuTrigger: Container,
+    ContextMenuContent: Container,
+    ContextMenuItem: Container,
+  };
+});
+
+vi.mock("@/components/ui/button", () => ({
+  Button: ({
+    children,
+    onPress,
+    testID,
+    disabled,
+  }: {
+    children: React.ReactNode;
+    onPress(): void;
+    testID?: string;
+    disabled?: boolean;
+  }) =>
+    React.createElement(
+      "button",
+      { type: "button", onClick: onPress, "data-testid": testID, disabled },
+      children,
+    ),
+}));
+
 vi.mock("react-native-unistyles", () => ({
   StyleSheet: {
     create: (factory: unknown) => (typeof factory === "function" ? factory(theme) : factory),

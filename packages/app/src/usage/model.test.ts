@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   resolveUsageReport,
+  enabledHostUsageReports,
   displayPercent,
   formatUsageFreshness,
   resolveAgentUsageView,
@@ -16,6 +17,182 @@ import {
   type UsageQueryState,
 } from "./model";
 import type { UsageReportEntry, UsageWindow } from "./types";
+import {
+  createUsageRefreshScheduler,
+  USAGE_IDLE_TIMEOUT_MS,
+  USAGE_REFRESH_INTERVAL_MS,
+  type UsageRefreshTarget,
+} from "./refresh-scheduler";
+
+describe("sidebar usage refresh scheduling", () => {
+  const local = { serverId: "local", agentId: "a" };
+  const other = { serverId: "remote", agentId: "a" };
+
+  function setup() {
+    const state = {
+      now: 1_000_000,
+      idleMs: 0 as number | null,
+      eligible: true,
+      updatedAt: 0,
+      idleRead: () => Promise.resolve(state.idleMs),
+      fetch: async (_target: UsageRefreshTarget, _force: boolean) => {},
+    };
+    const calls: Array<{ target: UsageRefreshTarget; force: boolean }> = [];
+    const scheduler = createUsageRefreshScheduler({
+      now: () => state.now,
+      readIdleMs: () => state.idleRead(),
+      canRefresh: () => state.eligible,
+      updatedAt: () => state.updatedAt,
+      fetch: async (target, force) => {
+        calls.push({ target, force });
+        await state.fetch(target, force);
+      },
+    });
+    return { state, calls, ...scheduler };
+  }
+
+  it("shares one read for both windows and polls only after five minutes", async () => {
+    const { state, calls, refresh } = setup();
+    await refresh(local);
+    state.now += USAGE_REFRESH_INTERVAL_MS - 1;
+    await refresh(local);
+    expect(calls).toHaveLength(1);
+    state.now += 1;
+    await refresh(local);
+    expect(calls).toEqual([
+      { target: local, force: false },
+      { target: local, force: false },
+    ]);
+  });
+
+  it("pauses while backgrounded, offline, unfocused, or idle, then resumes when due", async () => {
+    const { state, calls, refresh } = setup();
+    state.eligible = false;
+    await refresh(local);
+    state.eligible = true;
+    state.idleMs = USAGE_IDLE_TIMEOUT_MS;
+    await refresh(local);
+    expect(calls).toHaveLength(0);
+    state.idleMs = 0;
+    await refresh(local);
+    state.eligible = false;
+    state.now += USAGE_REFRESH_INTERVAL_MS;
+    await refresh(local);
+    expect(calls).toHaveLength(1);
+    state.eligible = true;
+    await refresh(local);
+    expect(calls).toHaveLength(2);
+  });
+
+  it("does not force-refresh on return to the foreground inside the interval", async () => {
+    const { state, calls, refresh } = setup();
+    await refresh(local);
+    for (let i = 0; i < 4; i++) {
+      state.eligible = false;
+      await refresh(local);
+      state.eligible = true;
+      state.now += 10_000;
+      await refresh(local);
+    }
+    expect(calls).toHaveLength(1);
+  });
+
+  it("joins manual and automatic reads in flight, and manual success resets the interval", async () => {
+    const { state, calls, refresh } = setup();
+    let finish!: () => void;
+    state.fetch = () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+    const pending = refresh(local);
+    const manual = refresh(local, { force: true });
+    expect(manual).toBe(pending);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(calls).toHaveLength(1);
+    finish();
+    await pending;
+    state.fetch = async () => {};
+    state.now += 60_000;
+    await refresh(local, { force: true });
+    expect(calls.at(-1)?.force).toBe(true);
+    state.now += USAGE_REFRESH_INTERVAL_MS - 1;
+    await refresh(local);
+    expect(calls).toHaveLength(2);
+  });
+
+  it("backs off failures for a full interval while preserving a manual retry", async () => {
+    const { state, calls, refresh } = setup();
+    state.fetch = async () => {
+      throw new Error("rate limited");
+    };
+    await expect(refresh(local)).rejects.toThrow("rate limited");
+    for (let i = 0; i < 4; i++) {
+      state.now += 60_000;
+      await refresh(local);
+    }
+    expect(calls).toHaveLength(1);
+    state.fetch = async () => {};
+    await refresh(local, { force: true });
+    expect(calls).toHaveLength(2);
+  });
+
+  it("isolates hosts and accounts, and verifies the account when switching chats", async () => {
+    const { calls, refresh } = setup();
+    await refresh(local);
+    await refresh(other);
+    await refresh({ serverId: "local", agentId: "b" });
+    await refresh(local, { verifyAccount: true });
+    expect(calls.map((call) => call.target)).toEqual([
+      local,
+      other,
+      { serverId: "local", agentId: "b" },
+      local,
+    ]);
+  });
+
+  it("reuses a newer shared result and checks eligibility again after asynchronous idle detection", async () => {
+    const { state, calls, refresh } = setup();
+    state.updatedAt = state.now;
+    await refresh(local);
+    expect(calls).toHaveLength(0);
+    state.now += USAGE_REFRESH_INTERVAL_MS;
+    let finish!: (value: number) => void;
+    state.idleRead = () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      });
+    const pending = refresh(local);
+    await Promise.resolve();
+    state.eligible = false;
+    finish(0);
+    await pending;
+    expect(calls).toHaveLength(0);
+  });
+});
+
+describe("enabledHostUsageReports", () => {
+  it("hides explicitly disabled providers while preserving enabled and standalone sources", () => {
+    const cursor = entry({ sourceId: "cursor" });
+    const codex = entry({ sourceId: "codex" });
+    const standalone = entry({ sourceId: "subscription" });
+    expect(
+      enabledHostUsageReports([cursor, codex, standalone], { cursor: { enabled: false } }),
+    ).toEqual([codex, standalone]);
+    expect(enabledHostUsageReports([cursor, codex], { cursor: { enabled: true } })).toEqual([
+      cursor,
+      codex,
+    ]);
+    expect(enabledHostUsageReports([cursor], { cursor: {} })).toEqual([cursor]);
+  });
+
+  it("keeps each host's disabled-provider policy separate without deleting cached reports", () => {
+    const reports = [entry({ sourceId: "cursor" })];
+    expect(enabledHostUsageReports(reports, { cursor: { enabled: false } })).toEqual([]);
+    expect(enabledHostUsageReports(reports, {})).toEqual(reports);
+    expect(reports).toHaveLength(1);
+  });
+});
 
 function entry(input: {
   windows?: UsageWindow[];

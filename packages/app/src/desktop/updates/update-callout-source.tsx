@@ -19,6 +19,18 @@ import { openChangelog } from "@/changelog";
 const CHECK_INTERVAL_MS = 30 * 60 * 1000;
 
 function renderBody(body: UpdateCalloutBody, t: ReturnType<typeof useTranslation>["t"]): ReactNode {
+  if (body.kind === "notice") {
+    return (
+      <>
+        <SidebarCalloutDescriptionText>
+          {t("desktop.updates.status.officialReleaseAvailable", { version: body.versionLabel })}
+        </SidebarCalloutDescriptionText>
+        <SidebarCalloutDescriptionText>
+          {t("desktop.updates.notificationOnly")}
+        </SidebarCalloutDescriptionText>
+      </>
+    );
+  }
   if (body.kind === "installing") return t("desktop.updates.callout.installingDescription");
   if (body.kind === "error") return body.message;
   return <UpdateAvailableDescription versionLabel={body.versionLabel ?? undefined} t={t} />;
@@ -41,6 +53,7 @@ export function UpdateCalloutSource() {
   const callouts = useSidebarCallouts();
   const { theme } = useUnistyles();
   const {
+    notificationOnly,
     isDesktopApp,
     status,
     availableUpdate,
@@ -75,6 +88,7 @@ export function UpdateCalloutSource() {
 
   useEffect(() => {
     const descriptor = resolveUpdateCalloutDescriptor({
+      notificationOnly: notificationOnly === true,
       isDesktopApp,
       status,
       isInstalling,
@@ -101,6 +115,7 @@ export function UpdateCalloutSource() {
       testID: descriptor.testID,
     });
   }, [
+    notificationOnly,
     availableUpdate,
     callouts,
     errorMessage,

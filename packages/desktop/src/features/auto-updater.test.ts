@@ -28,6 +28,7 @@ const { autoUpdaterMock } = vi.hoisted(() => {
 vi.mock("electron", () => ({
   app: {
     getPath: vi.fn(),
+    getVersion: vi.fn(() => "0.12.0"),
     isPackaged: true,
   },
 }));
@@ -36,9 +37,14 @@ vi.mock("electron-updater", () => ({
   autoUpdater: autoUpdaterMock,
 }));
 
+import { app } from "electron";
+import { createReviewUpdateChecker } from "./review-update-check";
+
 import {
   bucketFromStagingUserId,
   checkForAppUpdate,
+  downloadAndInstallUpdate,
+  installAppUpdateOnQuit,
   createAppUpdateLifecycleLogger,
   resolveStagingUserId,
   rolloutManifestSchema,
@@ -47,6 +53,62 @@ import {
 } from "./auto-updater";
 
 describe("checkForAppUpdate", () => {
+  it("checks only release metadata for a review build without mistaking its base release for an update", async () => {
+    vi.mocked(app.getVersion).mockReturnValueOnce("0.12.0-review.1");
+    const request = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ tag_name: "v0.12.0", draft: false, prerelease: false })),
+      );
+    const calls = autoUpdaterMock.checkForUpdates.mock.calls.length;
+    try {
+      const result = await checkForAppUpdate({
+        currentVersion: "0.12.0-review.1",
+        releaseChannel: "stable",
+        intent: "manual",
+      });
+      expect(result).toMatchObject({
+        notificationOnly: true,
+        hasUpdate: false,
+        readyToInstall: false,
+        latestVersion: "0.12.0",
+      });
+      expect(request).toHaveBeenCalledWith(
+        "https://api.github.com/repos/getpaseo/paseo/releases/latest",
+        expect.any(Object),
+      );
+      expect(autoUpdaterMock.checkForUpdates).toHaveBeenCalledTimes(calls);
+    } finally {
+      request.mockRestore();
+    }
+  });
+
+  it("rejects review installs and quit-time installs before downloading or stopping any daemon", async () => {
+    vi.mocked(app.getVersion).mockReturnValue("0.12.0-review.1");
+    const beforeQuit = vi.fn();
+    const downloads = autoUpdaterMock.downloadUpdate.mock.calls.length;
+    const installs = autoUpdaterMock.quitAndInstall.mock.calls.length;
+    try {
+      expect(
+        await downloadAndInstallUpdate(
+          { currentVersion: "0.12.0-review.1", releaseChannel: "stable" },
+          beforeQuit,
+        ),
+      ).toMatchObject({ installed: false });
+      expect(
+        await installAppUpdateOnQuit({
+          currentVersion: "0.12.0-review.1",
+          releaseChannel: "stable",
+          signal: new AbortController().signal,
+        }),
+      ).toBe(false);
+      expect(beforeQuit).not.toHaveBeenCalled();
+      expect(autoUpdaterMock.downloadUpdate).toHaveBeenCalledTimes(downloads);
+      expect(autoUpdaterMock.quitAndInstall).toHaveBeenCalledTimes(installs);
+    } finally {
+      vi.mocked(app.getVersion).mockReturnValue("0.12.0");
+    }
+  });
   it("treats an unpublished channel manifest as an unavailable update", async () => {
     const error = Object.assign(new Error("Cannot find latest-mac.yml"), {
       code: "ERR_UPDATER_CHANNEL_FILE_NOT_FOUND",
@@ -314,6 +376,66 @@ describe("shouldAdmitToRollout", () => {
       expect(second).toBe(first);
     } finally {
       await rm(tempDir, { force: true, recursive: true });
+    }
+  });
+});
+
+describe("review release notifications", () => {
+  const release = (tag_name: string) => ({ tag_name, draft: false, prerelease: false });
+
+  it("compares numeric release versions and never marks a release as installable", async () => {
+    const read = vi.fn(async () => release("v0.12.10"));
+    const check = createReviewUpdateChecker(read);
+    expect(await check("0.12.2-review.1")).toMatchObject({
+      notificationOnly: true,
+      hasUpdate: true,
+      readyToInstall: false,
+      latestVersion: "0.12.10",
+    });
+    expect(await check("0.12.10-review.2")).toMatchObject({ hasUpdate: false });
+    expect(await check("0.13.0-review.1")).toMatchObject({ hasUpdate: false });
+    expect(read).toHaveBeenCalledTimes(1);
+  });
+
+  it("shares concurrent checks and checks again after thirty minutes", async () => {
+    let time = 0;
+    const read = vi.fn(async () => release("v0.13.0"));
+    const check = createReviewUpdateChecker(read, () => time);
+    await Promise.all([check("0.12.0-review.1"), check("0.12.0-review.1")]);
+    expect(read).toHaveBeenCalledTimes(1);
+    time = 30 * 60 * 1000;
+    await check("0.12.0-review.1");
+    expect(read).toHaveBeenCalledTimes(2);
+  });
+
+  it("reports a network failure and retries without displaying a false update", async () => {
+    const read = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce(release("v0.13.0"));
+    const check = createReviewUpdateChecker(read);
+    expect(await check("0.12.0-review.1")).toMatchObject({
+      notificationOnly: true,
+      hasUpdate: false,
+      readyToInstall: false,
+      errorMessage: "offline",
+    });
+    expect(await check("0.12.0-review.1")).toMatchObject({ hasUpdate: true, errorMessage: null });
+    expect(read).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not announce drafts or prereleases", async () => {
+    for (const value of [
+      { ...release("v0.13.0"), draft: true },
+      { ...release("v0.13.0"), prerelease: true },
+      release("v0.13.0-beta.1"),
+    ]) {
+      expect(await createReviewUpdateChecker(async () => value)("0.12.0-review.1")).toMatchObject({
+        hasUpdate: false,
+        readyToInstall: false,
+        notificationOnly: true,
+        errorMessage: expect.any(String),
+      });
     }
   });
 });

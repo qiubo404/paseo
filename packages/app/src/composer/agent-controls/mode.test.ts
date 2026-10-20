@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AgentMode } from "@getpaseo/protocol/agent-types";
-import { resolveAgentControlsMode, resolveNextAgentModeId } from "./mode";
+import { resolveAgentControlsMode, resolveNextAgentModeId, resolveAgentModeShortcut } from "./mode";
 
 const PLAN_MODE = { id: "plan", label: "Plan" } satisfies AgentMode;
 
@@ -9,6 +9,41 @@ const MODES = [
   { id: "build", label: "Build" },
   { id: "full-access", label: "Full Access" },
 ] satisfies AgentMode[];
+
+describe("resolveAgentModeShortcut", () => {
+  it.each([false, true])("toggles Codex planning from %s without changing permissions", (value) => {
+    expect(
+      resolveAgentModeShortcut({
+        provider: "codex",
+        features: [{ id: "plan_mode", type: "toggle", label: "Plan", value }],
+        modeOptions: MODES,
+        selectedMode: "full-access",
+      }),
+    ).toEqual({ type: "feature", featureId: "plan_mode", value: !value });
+  });
+
+  it("does not change Codex permissions when planning is unavailable", () => {
+    expect(
+      resolveAgentModeShortcut({
+        provider: "codex",
+        features: [],
+        modeOptions: MODES,
+        selectedMode: "build",
+      }),
+    ).toBeNull();
+  });
+
+  it("keeps mode cycling for other providers", () => {
+    expect(
+      resolveAgentModeShortcut({
+        provider: "claude",
+        features: [],
+        modeOptions: MODES,
+        selectedMode: "build",
+      }),
+    ).toEqual({ type: "mode", modeId: "full-access" });
+  });
+});
 
 describe("resolveAgentControlsMode", () => {
   it("uses ready mode when no controlled agent controls are provided", () => {

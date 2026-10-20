@@ -153,6 +153,13 @@ export const ar: TranslationResources = {
       dictation: "الإملاء",
       interruptBeforeVoice: "قم بمقاطعة الوكيل قبل بدء الوضع الصوتي",
     },
+    imageReview: {
+      commentNumber: "تعليق {{number}}",
+      comment: "إضافة تعليق",
+      hint: "انقر على الصورة لإضافة تعليق. اسحب للتحريك ومرر للتكبير.",
+      delete: "حذف",
+      done: "تم",
+    },
     attachments: {
       addImage: "أضف صورة",
       pasteImage: "لصق صورة",
@@ -317,6 +324,14 @@ export const ar: TranslationResources = {
     },
   },
   message: {
+    imageCopy: "نسخ الصورة",
+    imageCopying: "جارٍ نسخ الصورة...",
+    imageCopied: "تم نسخ الصورة",
+    imageCopyFailed: "تعذر نسخ الصورة: {{reason}}",
+    imageAddToChat: "إضافة إلى مربع المحادثة",
+    imageAddingToChat: "جارٍ إضافة الصورة...",
+    imageAddFailed: "تعذرت إضافة الصورة: {{reason}}",
+    imageAddInvalid: "بيانات الصورة غير متاحة",
     diagram: {
       diagram: "مخطط",
       zoomIn: "تكبير",
@@ -1150,6 +1165,8 @@ export const ar: TranslationResources = {
     },
   },
   sidebar: {
+    usageHost: "خادم الاستخدام في الشريط الجانبي",
+    refreshUsage: "تحديث استخدام المحادثة الحالية",
     statusGroupAccessibility: "مجموعة {{label}}",
     statusBucket: {
       needsInput: "تحتاج إدخالاً",
@@ -1434,7 +1451,10 @@ export const ar: TranslationResources = {
       loadFailed: "غير قادر على تحميل حالة البرنامج الخفي لسطح المكتب.",
     },
     updates: {
+      notificationOnly:
+        "يُعلم Paseo Review بالإصدارات الرسمية فقط. ادمج التغييرات الرسمية وأعد بناء التطبيق المخصص لتحديثه.",
       status: {
+        officialReleaseAvailable: "الإصدار الرسمي {{version}} متاح.",
         checking: "جارٍ التحقق من وجود تحديثات للتطبيق...",
         installing: "جارٍ تثبيت تحديث التطبيق...",
         upToDate: "التطبيق محدث.",
@@ -1454,6 +1474,7 @@ export const ar: TranslationResources = {
       },
       installError: "غير قادر على تثبيت تحديث تطبيق سطح المكتب.",
       callout: {
+        officialReleaseTitle: "إصدار رسمي جديد",
         installingTitle: "تثبيت التحديث",
         failedTitle: "فشل التحديث",
         availableTitle: "التحديث متاح",

@@ -19,6 +19,7 @@ export type DesktopAppUpdateStatus =
 export const PENDING_RECHECK_MS = 10_000;
 
 export interface DesktopAppUpdaterSnapshot {
+  notificationOnly: boolean | null;
   status: DesktopAppUpdateStatus;
   availableUpdate: DesktopAppUpdateCheckResult | null;
   errorMessage: string | null;
@@ -64,6 +65,7 @@ export interface DesktopAppUpdater {
 }
 
 interface InternalState {
+  notificationOnly: boolean | null;
   status: DesktopAppUpdateStatus;
   availableUpdate: DesktopAppUpdateCheckResult | null;
   errorMessage: string | null;
@@ -74,6 +76,7 @@ interface InternalState {
 }
 
 const INITIAL_STATE: InternalState = {
+  notificationOnly: null,
   status: "idle",
   availableUpdate: null,
   errorMessage: null,
@@ -85,6 +88,7 @@ const INITIAL_STATE: InternalState = {
 
 function buildSnapshot(state: InternalState): DesktopAppUpdaterSnapshot {
   return {
+    notificationOnly: state.notificationOnly,
     status: state.status,
     availableUpdate: state.availableUpdate,
     errorMessage: state.errorMessage,
@@ -102,7 +106,21 @@ function getErrorMessage(error: unknown): string {
   return String(error);
 }
 
-export function formatStatusText(input: {
+export function formatStatusText(input: Parameters<typeof formatStandardStatusText>[0]): string {
+  if (input.status === "available" && input.availableUpdate?.notificationOnly) {
+    return i18n.t("desktop.updates.status.officialReleaseAvailable", {
+      version: input.formatVersion(input.availableUpdate.latestVersion),
+    });
+  }
+  return formatStandardStatusText(input);
+}
+
+function resolveCheckStatus(result: DesktopAppUpdateCheckResult): DesktopAppUpdateStatus {
+  if (result.readyToInstall || (result.hasUpdate && result.notificationOnly)) return "available";
+  return result.hasUpdate ? "pending" : "up-to-date";
+}
+
+function formatStandardStatusText(input: {
   status: DesktopAppUpdateStatus;
   availableUpdate: DesktopAppUpdateCheckResult | null;
   installMessage: string | null;
@@ -233,6 +251,7 @@ export function createDesktopAppUpdater(deps: DesktopAppUpdaterDeps): DesktopApp
       const nextLastCheckedAt = intent === "manual" ? deps.now() : state.lastCheckedAt;
       if (result.errorMessage) {
         if (silent && !result.hasUpdate) {
+          commit({ ...state, notificationOnly: result.notificationOnly === true });
           console.warn("[DesktopUpdater] Silent update check failed", result.errorMessage);
           return result;
         }
@@ -240,6 +259,7 @@ export function createDesktopAppUpdater(deps: DesktopAppUpdaterDeps): DesktopApp
         commit({
           ...state,
           status: "error",
+          notificationOnly: result.notificationOnly === true,
           availableUpdate: null,
           errorMessage: result.errorMessage,
           installMessage: null,
@@ -248,23 +268,13 @@ export function createDesktopAppUpdater(deps: DesktopAppUpdaterDeps): DesktopApp
         return result;
       }
 
-      let nextStatus: DesktopAppUpdateStatus;
-      let nextAvailable: DesktopAppUpdateCheckResult | null;
-
-      if (result.readyToInstall) {
-        nextStatus = "available";
-        nextAvailable = result;
-      } else if (result.hasUpdate) {
-        nextStatus = "pending";
-        nextAvailable = result;
-      } else {
-        nextStatus = "up-to-date";
-        nextAvailable = null;
-      }
+      const nextStatus = resolveCheckStatus(result);
+      const nextAvailable = nextStatus === "up-to-date" ? null : result;
 
       commit({
         ...state,
         status: nextStatus,
+        notificationOnly: result.notificationOnly === true,
         availableUpdate: nextAvailable,
         errorMessage: null,
         installMessage: null,
@@ -295,6 +305,7 @@ export function createDesktopAppUpdater(deps: DesktopAppUpdaterDeps): DesktopApp
   async function installUpdate(options: {
     releaseChannel: DesktopReleaseChannel;
   }): Promise<DesktopAppUpdateInstallResult | null> {
+    if (state.notificationOnly) return null;
     commit({
       ...state,
       status: "installing",

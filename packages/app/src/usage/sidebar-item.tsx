@@ -8,18 +8,20 @@ import {
   type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  Pressable,
-  Text,
-  View,
-  type LayoutChangeEvent,
-  type PressableStateCallbackType,
-} from "react-native";
-import { StyleSheet } from "react-native-unistyles";
+import { Text, View, type LayoutChangeEvent, type PressableStateCallbackType } from "react-native";
+import { StyleSheet, withUnistyles } from "react-native-unistyles";
+import { RotateCw } from "lucide-react-native";
+import { ToolbarButton } from "@/components/ui/pane-content-toolbar";
+import { LoadingSpinner } from "@/components/ui/loading-spinner";
+import { extraMutedIconColorMapping } from "@/components/ui/icon-button-chrome";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { useIsCompactFormFactor } from "@/constants/layout";
 import { builtinSidebarNavLabelKey } from "@/sidebar-nav/model";
-import { useUsagePreferences } from "./display";
+import { useUsageDisplay } from "./display";
 import { useUsageHostId } from "./hosts";
-import { useUsageHostReports } from "./queries";
+import { useSidebarUsageQuery } from "./queries";
+import { usageCopy } from "./copy";
+import { resolveUsageReport } from "./model";
 import { UsageSourceIcon } from "./source-icon";
 import { UsageMeter } from "./meter";
 import {
@@ -32,16 +34,38 @@ import {
 } from "./pinned";
 import { UsageModal } from "./usage-modal";
 
+const ThemedRotateCw = withUnistyles(RotateCw);
+const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
+const SidebarUsageContext = createContext<ReturnType<typeof useSidebarUsageQuery> | null>(null);
+
+function useSidebarUsage() {
+  const usage = useContext(SidebarUsageContext);
+  if (!usage) throw new Error("Sidebar Usage must be inside UsageSidebarRoot.");
+  return usage;
+}
+
 /** Each summary window with data on the usage host, under its source; empty while none has. */
 function useUsageSummary(): readonly PinnedUsageSource[] {
-  const { preferences } = useUsagePreferences();
-  const reports = useUsageHostReports(useUsageHostId());
-  return useMemo(() => resolvePinnedUsage(reports, preferences), [preferences, reports]);
+  const { reports } = useSidebarUsage();
+  const { preferences } = useUsageDisplay(reports);
+  return useMemo(
+    () =>
+      resolvePinnedUsage(
+        reports.map((entry) =>
+          entry.report.status !== "available" && entry.lastSuccessful
+            ? { ...entry, report: entry.lastSuccessful.report }
+            : entry,
+        ),
+        preferences,
+      ),
+    [preferences, reports],
+  );
 }
 
 /** Whether the sidebar Usage item has anything to show. */
 export function useHasUsageSummary(): boolean {
-  return useUsageSummary().length > 0;
+  const { hasChat } = useSidebarUsage();
+  return useUsageSummary().length > 0 || hasChat;
 }
 
 /**
@@ -51,11 +75,72 @@ export function useHasUsageSummary(): boolean {
  */
 export function UsageSidebarItem() {
   const { t } = useTranslation();
-  const label = t(builtinSidebarNavLabelKey("usage"));
+  const compact = useIsCompactFormFactor();
+  const usage = useSidebarUsage();
+  const label = `${t(builtinSidebarNavLabelKey("usage"))}${usage.label ? ` · ${usage.label}` : ""}`;
   const openUsage = useOpenSidebarUsage();
   const sources = useUsageSummary();
-  if (sources.length === 0) return null;
-  return <PinnedUsageTrigger label={label} sources={sources} onPress={openUsage} />;
+  const messages = usage.reports.flatMap((entry) => resolveUsageReport(entry).messages);
+  const error = usage.error ?? (messages.length ? messages.join("\n") : null);
+  const status = error ?? (usage.loading ? usageCopy.loading : usageCopy.empty);
+  const refreshLabel = t("sidebar.refreshUsage");
+  const accountLabels = usage.reports
+    .map((entry) => entry.account.label)
+    .filter(Boolean)
+    .join(", ");
+  const detail = [label, accountLabels, error].filter(Boolean).join("\n");
+  const refreshTooltip = useMemo(
+    () => <Text style={styles.detail}>{`${refreshLabel}\n${detail}`}</Text>,
+    [refreshLabel, detail],
+  );
+  if (sources.length === 0 && !usage.hasChat) return null;
+  return (
+    <View>
+      <View style={styles.row}>
+        <Tooltip delayDuration={300} enabledOnDesktop enabledOnMobile={false}>
+          <PinnedUsageTrigger
+            label={label}
+            sources={sources}
+            placeholder={status}
+            onPress={openUsage}
+          />
+          <TooltipContent side="top" offset={8}>
+            <Text style={styles.detail}>
+              {[
+                detail,
+                ...sources.flatMap((source) => source.windows.map((window) => window.label)),
+              ].join("\n")}
+            </Text>
+          </TooltipContent>
+        </Tooltip>
+        <ToolbarButton
+          label={refreshLabel}
+          tooltip={refreshTooltip}
+          tooltipSide="top"
+          compact={compact}
+          onPress={usage.refresh}
+          disabled={usage.disabled || usage.busy}
+          testID="sidebar-usage-refresh"
+        >
+          {usage.busy ? (
+            <ThemedLoadingSpinner size={14} uniProps={extraMutedIconColorMapping} />
+          ) : (
+            <ThemedRotateCw size={14} uniProps={extraMutedIconColorMapping} />
+          )}
+        </ToolbarButton>
+      </View>
+      {error && sources.length > 0 ? (
+        <Text
+          style={styles.error}
+          numberOfLines={2}
+          accessibilityLiveRegion="polite"
+          testID="sidebar-usage-error"
+        >
+          {error}
+        </Text>
+      ) : null}
+    </View>
+  );
 }
 
 const OpenSidebarUsageContext = createContext<(() => void) | null>(null);
@@ -66,6 +151,7 @@ const OpenSidebarUsageContext = createContext<(() => void) | null>(null);
  * load only while it is shown.
  */
 export function UsageSidebarRoot({ children }: { children: ReactNode }) {
+  const usage = useSidebarUsageQuery(useUsageHostId());
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const openUsage = useCallback(() => {
@@ -76,10 +162,14 @@ export function UsageSidebarRoot({ children }: { children: ReactNode }) {
   const unmountUsage = useCallback(() => setMounted(false), []);
 
   return (
-    <OpenSidebarUsageContext.Provider value={openUsage}>
-      {children}
-      {mounted ? <UsageModal visible={open} onClose={closeUsage} onDismiss={unmountUsage} /> : null}
-    </OpenSidebarUsageContext.Provider>
+    <SidebarUsageContext.Provider value={usage}>
+      <OpenSidebarUsageContext.Provider value={openUsage}>
+        {children}
+        {mounted ? (
+          <UsageModal visible={open} onClose={closeUsage} onDismiss={unmountUsage} />
+        ) : null}
+      </OpenSidebarUsageContext.Provider>
+    </SidebarUsageContext.Provider>
   );
 }
 
@@ -112,10 +202,12 @@ function PinnedUsageTrigger({
   label,
   sources,
   onPress,
+  placeholder,
 }: {
   label: string;
   sources: readonly PinnedUsageSource[];
   onPress: () => void;
+  placeholder: string;
 }) {
   const [available, setAvailable] = useState<number | null>(null);
   const [labelsWidth, setLabelsWidth] = useState<number | null>(null);
@@ -136,7 +228,7 @@ function PinnedUsageTrigger({
     windowCount: sources.reduce((count, source) => count + source.windows.length, 0),
   });
   return (
-    <Pressable
+    <TooltipTrigger
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={pinnedUsageLabel(label, sources)}
@@ -144,7 +236,13 @@ function PinnedUsageTrigger({
       testID="sidebar-usage"
     >
       <View style={styles.line} onLayout={handleAvailableLayout}>
-        <PinnedUsageLine sources={sources} layout={layout} />
+        {sources.length ? (
+          <PinnedUsageLine sources={sources} layout={layout} />
+        ) : (
+          <Text style={styles.placeholder} numberOfLines={1}>
+            {placeholder}
+          </Text>
+        )}
       </View>
       <View
         style={styles.measure}
@@ -160,7 +258,7 @@ function PinnedUsageTrigger({
           <PinnedUsageLine sources={sources} layout="percents" measuring />
         </View>
       </View>
-    </Pressable>
+    </TooltipTrigger>
   );
 }
 
@@ -217,8 +315,17 @@ function PinnedUsageLine({
 }
 
 const styles = StyleSheet.create((theme) => ({
+  row: { flexDirection: "row", alignItems: "center", paddingRight: theme.spacing[2] },
+  detail: { color: theme.colors.foreground, fontSize: theme.fontSize.sm },
+  placeholder: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.sm },
+  error: {
+    color: theme.colors.statusWarning,
+    fontSize: theme.fontSize.sm,
+    paddingHorizontal: theme.spacing[2],
+  },
   trigger: {
-    width: "100%",
+    flex: 1,
+    minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
     overflow: "hidden",

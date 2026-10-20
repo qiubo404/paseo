@@ -318,3 +318,30 @@ describe("draft-store migration", () => {
     expect(backing.values.has("paseo-drafts")).toBe(true);
   });
 });
+
+it("restores reviewed and plain images together without losing per-image comments", async () => {
+  const metadata = {
+    id: "reviewed",
+    mimeType: "image/png",
+    storageType: "desktop-file" as const,
+    storageKey: "/screens/one.png",
+    createdAt: 1,
+  };
+  const attachments: UserComposerAttachment[] = [
+    {
+      kind: "image",
+      metadata,
+      comments: [{ id: "first", x: 0.2, y: 0.6, text: "Adjust spacing" }],
+    },
+    { kind: "image", metadata: { ...metadata, id: "plain", storageKey: "/screens/two.png" } },
+  ];
+  const state = {
+    drafts: { "agent:server:review": activeDraft("Overall note", 1, attachments) },
+    createModalDraft: null,
+  };
+  const restored = await migratePersistedState(JSON.parse(JSON.stringify(state)), {
+    migrateLegacyImages: passThroughMigrateLegacyImages,
+    nowMs: 2,
+  });
+  expect(restored).toEqual(state);
+});

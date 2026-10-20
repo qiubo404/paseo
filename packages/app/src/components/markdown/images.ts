@@ -90,8 +90,12 @@ export function useMarkdownSource(text: string, context: MarkdownImageContext) {
     return () => releases.forEach((release) => release());
   }, [results, acquisitions]);
   const resolved = new Map<string, string>();
+  const imageAttachments: Record<string, AttachmentMetadata> = {};
   results.forEach((result, index) => {
-    if (result.data) resolved.set(sources[index]!, result.data.uri);
+    if (result.data) {
+      resolved.set(sources[index]!, result.data.uri);
+      imageAttachments[result.data.uri] = result.data.attachment;
+    }
   });
   const displayUrls = sources.map(
     (source) =>
@@ -125,6 +129,7 @@ export function useMarkdownSource(text: string, context: MarkdownImageContext) {
   );
   const pendingImages = new Set(sources.filter((_source, index) => statuses[index] === "pending"));
   return {
+    imageAttachments,
     markdown: prepared.render(resolved, unavailableImages, pendingImages),
     linkRecognition: prepared.linkRecognition,
     linkSource: prepared.linkSource,

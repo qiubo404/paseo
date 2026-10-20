@@ -80,6 +80,7 @@ import Animated, {
 import Svg, { Defs, Rect, Stop, LinearGradient as SvgLinearGradient } from "react-native-svg";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { capAssistantMessageForRender, getUtf8ByteLength } from "./assistant-message-render-limit";
+import { buildDraftStoreKey } from "@/stores/draft-keys";
 import { getTurnDurationLabel } from "./assistant-turn-footer-label";
 import { getCompactionMarkerLabel } from "./message-compaction-label";
 import { PlanCard } from "./plan-card";
@@ -710,6 +711,7 @@ export const LiveElapsed = memo(function LiveElapsed({
 });
 
 interface AssistantMessageProps {
+  agentId?: string;
   renderFullContent?: boolean;
   occurrenceKey: string;
   message: string;
@@ -1129,6 +1131,7 @@ function NativeShimmerPeakSvg({ gradientId }: { gradientId: string }) {
 }
 
 export const AssistantMessage = memo(function AssistantMessage({
+  agentId,
   renderFullContent = false,
   occurrenceKey,
   message,
@@ -1185,6 +1188,7 @@ export const AssistantMessage = memo(function AssistantMessage({
       onLayout={measureMessage}
     >
       <MarkdownRenderer
+        imageDraftKey={serverId && agentId ? buildDraftStoreKey({ serverId, agentId }) : undefined}
         text={revealedMessage}
         streaming={phase !== "complete" || revealedMessage.length < renderedMessage.text.length}
         client={client}

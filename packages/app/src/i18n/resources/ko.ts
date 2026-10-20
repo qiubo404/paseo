@@ -153,6 +153,13 @@ export const ko: TranslationResources = {
       dictation: "받아쓰기",
       interruptBeforeVoice: "음성 모드를 시작하기 전에 에이전트를 중단하세요",
     },
+    imageReview: {
+      commentNumber: "댓글 {{number}}",
+      comment: "댓글 추가",
+      hint: "이미지를 클릭하여 댓글을 추가하세요. 드래그로 이동하고 스크롤로 확대하세요.",
+      delete: "삭제",
+      done: "완료",
+    },
     attachments: {
       addImage: "이미지 추가",
       pasteImage: "이미지 붙여넣기",
@@ -318,6 +325,14 @@ export const ko: TranslationResources = {
     },
   },
   message: {
+    imageCopy: "이미지 복사",
+    imageCopying: "이미지 복사 중...",
+    imageCopied: "이미지가 복사되었습니다",
+    imageCopyFailed: "이미지를 복사할 수 없습니다: {{reason}}",
+    imageAddToChat: "채팅 입력창에 추가",
+    imageAddingToChat: "이미지 추가 중...",
+    imageAddFailed: "이미지를 추가할 수 없습니다: {{reason}}",
+    imageAddInvalid: "이미지 데이터를 사용할 수 없습니다",
     diagram: {
       diagram: "다이어그램",
       zoomIn: "확대",
@@ -1157,6 +1172,8 @@ export const ko: TranslationResources = {
     },
   },
   sidebar: {
+    usageHost: "사이드바 사용량 호스트",
+    refreshUsage: "현재 채팅 사용량 새로고침",
     statusGroupAccessibility: "{{label}} 그룹",
     statusBucket: {
       needsInput: "입력 필요",
@@ -1440,7 +1457,10 @@ export const ko: TranslationResources = {
       loadFailed: "데스크톱 데몬 상태를 불러올 수 없습니다.",
     },
     updates: {
+      notificationOnly:
+        "Paseo Review는 공식 릴리스만 알립니다. 공식 변경 사항을 병합하고 사용자 지정 앱을 다시 빌드하여 업데이트하세요.",
       status: {
+        officialReleaseAvailable: "공식 버전 {{version}}이 출시되었습니다.",
         checking: "앱 업데이트 확인 중...",
         installing: "앱 업데이트 설치 중...",
         upToDate: "앱이 최신 상태입니다.",
@@ -1463,6 +1483,7 @@ export const ko: TranslationResources = {
       },
       installError: "데스크톱 앱 업데이트를 설치할 수 없습니다.",
       callout: {
+        officialReleaseTitle: "새 공식 릴리스",
         installingTitle: "업데이트 설치 중",
         failedTitle: "업데이트 실패",
         availableTitle: "업데이트 사용 가능",

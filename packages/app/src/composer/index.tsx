@@ -1,3 +1,4 @@
+import type { ImageReviewComment, ImageReviewBinding } from "@/attachments/image-review";
 import {
   useComposerEditingSession,
   useComposerFullscreen,
@@ -735,6 +736,11 @@ function ImageAttachmentPill({
       disabled={disabled}
     >
       <AttachmentThumbnail metadata={attachment.metadata} />
+      {attachment.comments?.length ? (
+        <Text testID="image-review-count" style={styles.imageReviewCount}>
+          {attachment.comments.length}
+        </Text>
+      ) : null}
     </AttachmentPill>
   );
 }
@@ -2235,11 +2241,35 @@ function ComposerContentImpl({
 
   const handleLightboxClose = useCallback(() => {
     setLightboxMetadata(null);
+    // Let the preview release its focus scope before focusing the composer.
+    requestAnimationFrame(() => focusMessageInputWithPlatformStrategy(messageInputRef));
   }, []);
   const lightboxSource = useMemo<ImageLightboxSource | null>(
     () => (lightboxMetadata ? { type: "attachment", metadata: lightboxMetadata } : null),
     [lightboxMetadata],
   );
+
+  const updateImageReview = useCallback(
+    (comments: ImageReviewComment[]) => {
+      if (!lightboxMetadata) return;
+      setSelectedAttachments((previous) =>
+        previous.map((attachment) =>
+          attachment.kind === "image" && attachment.metadata.id === lightboxMetadata.id
+            ? { ...attachment, comments }
+            : attachment,
+        ),
+      );
+    },
+    [lightboxMetadata, setSelectedAttachments],
+  );
+  const imageReview = useMemo<ImageReviewBinding | undefined>(() => {
+    if (!isWeb || !lightboxMetadata || isComposerLocked) return undefined;
+    const image = attachments.find(
+      (attachment) => attachment.kind === "image" && attachment.metadata.id === lightboxMetadata.id,
+    );
+    if (!image || image.kind !== "image") return undefined;
+    return { comments: image.comments ?? [], onChange: updateImageReview };
+  }, [attachments, lightboxMetadata, isComposerLocked, updateImageReview]);
 
   const handleGithubPickerOpenChange = useCallback(
     (open: boolean) => {
@@ -2405,7 +2435,11 @@ function ComposerContentImpl({
           isFullscreen ? animatedStaticStyles.fullscreenContainer : animatedStaticStyles.container
         }
       >
-        <AttachmentLightbox source={lightboxSource} onClose={handleLightboxClose} />
+        <AttachmentLightbox
+          source={lightboxSource}
+          onClose={handleLightboxClose}
+          review={imageReview}
+        />
         {/* Input area */}
         <View style={inputAreaContainerStyle}>
           <View style={inputAreaContentStyle}>
@@ -2525,6 +2559,16 @@ const animatedStaticStyles = RNStyleSheet.create({
 });
 
 const styles = StyleSheet.create((theme: Theme) => ({
+  imageReviewCount: {
+    position: "absolute",
+    right: 0,
+    bottom: 0,
+    backgroundColor: theme.colors.accent,
+    color: theme.colors.accentForeground,
+    fontSize: theme.fontSize.sm,
+    paddingHorizontal: theme.spacing[1],
+    borderRadius: theme.borderRadius.sm,
+  },
   borderSeparator: {
     height: theme.borderWidth[1],
     backgroundColor: theme.colors.border,

@@ -124,7 +124,7 @@ function parseDesktopDaemonStopReason(
 // ---------------------------------------------------------------------------
 
 function getPaseoHome(): string {
-  return resolvePaseoHome(process.env);
+  return process.env.PASEO_DESKTOP_DAEMON_HOME?.trim() || resolvePaseoHome(process.env);
 }
 
 function logFilePath(): string {
@@ -257,10 +257,10 @@ export async function resolveDesktopDaemonStatus(): Promise<DesktopDaemonStatus>
   }
 }
 
-function normalizeVersion(version: string | null): string | null {
+export function normalizeVersion(version: string | null): string | null {
   const trimmed = version?.trim();
   if (!trimmed) return null;
-  return trimmed.replace(/^v/i, "");
+  return trimmed.replace(/^v/i, "").replace(/-review\.\d+$/, "");
 }
 
 function shouldRestartForVersion(current: DesktopDaemonStatus): boolean {

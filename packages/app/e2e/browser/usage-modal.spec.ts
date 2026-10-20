@@ -3,11 +3,14 @@ import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type { Page } from "@playwright/test";
 import type { UsageReportEntry } from "@getpaseo/protocol/messages";
+import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
+import { connectDaemonClient } from "../support/helpers/daemon-client-loader";
 import { expect, test } from "../support/fixtures";
 import { gotoAppShell } from "../support/helpers/app";
 import { addConnectedHostAndReload } from "../support/helpers/hosts";
 import { startIsolatedHostDaemon } from "../support/helpers/isolated-host-daemon";
 import { getServerId } from "../support/helpers/server-id";
+import { openAgentRoute, seedMockAgentWorkspace } from "../support/helpers/mock-agent";
 import { seedSidebarFooterPreferences } from "../support/helpers/sidebar-nav-settings";
 import {
   installUsageReportsFixture,
@@ -31,6 +34,8 @@ import {
   pinRow,
   openUsageOptions,
   closeUsageOptions,
+  closeUsage,
+  usageOptionsSurface,
   expectUsageOptionsFitContent,
   showUsageAs,
   refreshAllUsage,
@@ -136,6 +141,144 @@ async function refreshUsageAndWaitForReports(page: Page, usage: UsageReportsFixt
 }
 
 test.describe("usage modal", () => {
+  test("sidebar follows the focused chat and its refresh action stays outside the all-host modal", async ({
+    page,
+  }) => {
+    test.setTimeout(180_000);
+    const first = await seedMockAgentWorkspace({
+      repoPrefix: "usage-chat-a",
+      title: "Quota chat A",
+    });
+    const second = await seedMockAgentWorkspace({
+      repoPrefix: "usage-chat-b",
+      title: "Quota chat B",
+    });
+    let fail = false;
+    try {
+      const usage = await installUsageReportsFixture(page, {
+        lists: [
+          (request) => {
+            if (fail && request.forceRefresh) return { error: "Usage temporarily unavailable" };
+            let pct = 99;
+            if (request.agentId === first.agentId) pct = request.forceRefresh ? 43 : 11;
+            else if (request.agentId === second.agentId) pct = 22;
+            const report = weeklyReport("codex", pct);
+            report.account = { label: request.agentId ?? "host-only-account" };
+            return [report];
+          },
+        ],
+      });
+      await openAgentRoute(page, first);
+      await expectPinnedUsage(page, ["11% Weekly"]);
+      const refresh = page.getByTestId("sidebar-usage-refresh").filter({ visible: true }).first();
+      await expect(refresh).toBeEnabled();
+      const count = usage.listRequests().length;
+      await refresh.click();
+      await expectPinnedUsage(page, ["43% Weekly"]);
+      expect(usage.listRequests().slice(count)).toEqual([
+        { forceRefresh: true, agentId: first.agentId, reportIds: undefined },
+      ]);
+      await expect(page.getByTestId("usage-modal")).not.toBeVisible();
+
+      fail = true;
+      await refresh.click();
+      await expect(
+        page.getByTestId("sidebar-usage-error").filter({ visible: true }).first(),
+      ).toContainText("Usage temporarily unavailable");
+      await expectPinnedUsage(page, ["43% Weekly"]);
+      fail = false;
+      await refresh.click();
+      await expect(refresh).toBeEnabled();
+      await expect(page.getByTestId("sidebar-usage-error")).not.toBeVisible();
+
+      await page
+        .getByTestId(`sidebar-workspace-row-${getServerId()}:${second.workspaceId}`)
+        .filter({ visible: true })
+        .first()
+        .click();
+      await expectPinnedUsage(page, ["22% Weekly"]);
+      expect(usage.listRequests().at(-1)?.agentId).toBe(second.agentId);
+      await refresh.click();
+      expect(usage.listRequests().at(-1)?.agentId).toBe(second.agentId);
+      await qaScreenshot(page, "sidebar-current-chat-refresh");
+    } finally {
+      await second.cleanup();
+      await first.cleanup();
+    }
+  });
+
+  test("sidebar keeps its manual retry when the current chat has no quota yet", async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    const agent = await seedMockAgentWorkspace({
+      repoPrefix: "usage-chat-empty",
+      title: "Empty quota chat",
+    });
+    try {
+      const usage = await installUsageReportsFixture(page, {
+        lists: [(request) => (request.forceRefresh ? [weeklyReport("codex", 17)] : [])],
+      });
+      await openAgentRoute(page, agent);
+      const refresh = page.getByTestId("sidebar-usage-refresh").filter({ visible: true }).first();
+      await expect(refresh).toBeEnabled();
+      await expect(usageItem(page)).toContainText("No usage data");
+      await refresh.click();
+      await expectPinnedUsage(page, ["17% Weekly"]);
+      expect(usage.listRequests().at(-1)?.forceRefresh).toBe(true);
+      expect(usage.listRequests().at(-1)?.agentId).toBe(agent.agentId);
+    } finally {
+      await agent.cleanup();
+    }
+  });
+
+  test("sidebar polls the active chat every five minutes and pauses away from the chat", async ({
+    page,
+  }) => {
+    test.setTimeout(180_000);
+    const agent = await seedMockAgentWorkspace({
+      repoPrefix: "usage-chat-timer",
+      title: "Timed quota chat",
+    });
+    try {
+      await page.clock.install();
+      const usage = await installUsageReportsFixture(page, {
+        lists: [[weeklyReport("codex", 19)]],
+      });
+      await openAgentRoute(page, agent);
+      await expectPinnedUsage(page, ["19% Weekly"]);
+      const chatReads = () =>
+        usage.listRequests().filter((request) => request.agentId === agent.agentId);
+      const count = chatReads().length;
+      await page.clock.fastForward(4 * 60_000);
+      expect(chatReads()).toHaveLength(count);
+      await page.clock.fastForward(61_000);
+      await expect.poll(() => chatReads().length).toBe(count + 1);
+      expect(chatReads().at(-1)?.forceRefresh).toBe(false);
+      await page
+        .getByRole("button", { name: "Settings", exact: true })
+        .filter({ visible: true })
+        .first()
+        .click();
+      await page.waitForURL(/\/settings/);
+      await expect(page.getByTestId("sidebar-usage-refresh").filter({ visible: true })).toHaveCount(
+        0,
+      );
+      await page.clock.fastForward(10 * 60_000);
+      expect(chatReads()).toHaveLength(count + 1);
+      await page
+        .getByRole("button", { name: "Back", exact: true })
+        .filter({ visible: true })
+        .first()
+        .click();
+      await expect.poll(() => chatReads().length).toBe(count + 2);
+      await page.clock.fastForward(60_000);
+      expect(chatReads()).toHaveLength(count + 2);
+    } finally {
+      await agent.cleanup();
+    }
+  });
+
   test("opens from the sidebar on the host's reports, with no host filter for one host", async ({
     page,
   }) => {
@@ -298,12 +441,12 @@ test.describe("usage modal", () => {
       page.getByTestId(`usage-host-${serverId}`).getByText(/^Update .+ to see usage$/),
     ).toBeVisible({ timeout: 10_000 });
     await qaScreenshot(page, "phase7-usage-update-host");
-    await expect(page.getByTestId("usage-options-menu")).toHaveCount(0);
-    await expect(page.getByTestId("usage-refresh-all")).toHaveCount(0);
+    await expect(page.getByTestId("usage-options-menu")).toBeVisible();
+    await expect(page.getByTestId("usage-refresh-all")).toBeDisabled();
     expect(usage.listRequests()).toHaveLength(0);
   });
 
-  test("a host picked in the Usage modal is the sidebar's host too, after a reload", async ({
+  test("shows all hosts while the settings host picker changes only the sidebar, after a reload", async ({
     page,
   }) => {
     test.setTimeout(420_000);
@@ -322,19 +465,36 @@ test.describe("usage modal", () => {
         serverId: secondary.serverId,
         label: "Secondary box",
         port: secondary.port,
+        primaryLabel: "Primary workstation with a very long host name for usage",
       });
 
       // Nothing picked and no workspace open: the first host.
       await expectPinnedUsage(page, ["31% Weekly"]);
       await openUsageFromItem(page);
       await expect(page.getByTestId(`usage-host-${primaryServerId}`)).toBeVisible();
+      await expect(
+        page.getByTestId(`usage-host-${secondary.serverId}`).getByText("12%"),
+      ).toBeVisible({ timeout: 30_000 });
+      await expect(hostFilter(page)).toHaveCount(0);
 
+      await openUsageOptions(page);
+      const settingsBounds = await usageOptionsSurface(page).boundingBox();
+      const pickerBounds = await hostFilter(page).boundingBox();
+      expect(settingsBounds).not.toBeNull();
+      expect(pickerBounds).not.toBeNull();
+      expect(pickerBounds!.x + pickerBounds!.width).toBeLessThanOrEqual(
+        settingsBounds!.x + settingsBounds!.width,
+      );
       await hostFilter(page).click();
       await page.getByTestId(`usage-host-filter-item-${secondary.serverId}`).click();
       await expect(
         page.getByTestId(`usage-host-${secondary.serverId}`).getByText("12%"),
       ).toBeVisible({ timeout: 30_000 });
       await expect(hostFilter(page)).toContainText("Secondary box");
+      await closeUsageOptions(page);
+      await expect(
+        page.getByTestId(`usage-host-${primaryServerId}`).getByText("31%"),
+      ).toBeVisible();
       await qaScreenshot(page, "usage-modal-picked-host");
       await expectPinnedUsage(page, ["12% Weekly"]);
 
@@ -655,3 +815,182 @@ async function expectRetainedLoginUsage(page: Page, message: string) {
   await expect(card.getByTestId("usage-login-error")).toHaveText(message);
   await expect(card.getByText("Reset time passed", { exact: false })).toBeVisible();
 }
+
+test("all-host usage isolates slow requests, refresh failures, card IDs and reconnects", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const primaryServerId = getServerId();
+  const secondary = await startIsolatedHostDaemon(
+    `srv_usage_${randomUUID().replaceAll("-", "").slice(0, 12)}`,
+  );
+  let releaseSecondary!: () => void;
+  const secondaryGate = new Promise<void>((resolve) => {
+    releaseSecondary = resolve;
+  });
+  let secondaryMode: "initial" | "fail" | "ready" = "initial";
+  let primaryRefreshes = 0;
+  try {
+    const primaryUsage = await installUsageReportsFixture(page, {
+      lists: [
+        (request) => {
+          if (request.forceRefresh) primaryRefreshes += 1;
+          return [weeklyReport("alpha", primaryRefreshes > 0 ? 40 + primaryRefreshes : 31)];
+        },
+      ],
+    });
+    const secondaryUsage = await installUsageReportsFixture(page, {
+      port: secondary.port,
+      lists: [
+        (request) => {
+          if (request.forceRefresh && secondaryMode === "fail")
+            return { error: "Secondary quota unavailable" };
+          if (secondaryMode === "initial")
+            return { stream: [secondaryGate, weeklyReport("alpha", 12)] };
+          return [weeklyReport("alpha", 22)];
+        },
+      ],
+    });
+    await gotoAppShell(page);
+    await addConnectedHostAndReload(page, {
+      serverId: secondary.serverId,
+      label: "Secondary box",
+      port: secondary.port,
+    });
+    await expectPinnedUsage(page, ["31% Weekly"]);
+    await openUsageFromItem(page);
+    const primaryGroup = page.getByTestId(`usage-host-${primaryServerId}`);
+    const secondaryGroup = page.getByTestId(`usage-host-${secondary.serverId}`);
+    await expect(primaryGroup.getByText("31%", { exact: true })).toBeVisible();
+    await expect(secondaryGroup.getByText("Loading usage...", { exact: true })).toBeVisible();
+    await expect(secondaryGroup.getByText("31%", { exact: true })).toHaveCount(0);
+    releaseSecondary();
+    await expect(secondaryGroup.getByText("12%", { exact: true })).toBeVisible();
+    await expect(page.getByTestId("usage-refresh-all")).toBeEnabled();
+
+    secondaryMode = "fail";
+    await refreshAllUsage(page);
+    await expect(primaryGroup.getByText("41%", { exact: true })).toBeVisible();
+    await expect(secondaryGroup.getByText("12%", { exact: true })).toBeVisible();
+    await expect(
+      secondaryGroup.getByText("Secondary quota unavailable", { exact: true }),
+    ).toBeVisible();
+    await expect(page.getByTestId("usage-refresh-all")).toBeEnabled();
+    expect(forcedRefreshes(primaryUsage)).toEqual([{ forceRefresh: true }]);
+    expect(forcedRefreshes(secondaryUsage)).toEqual([{ forceRefresh: true }]);
+
+    secondaryMode = "ready";
+    await secondaryGroup.getByRole("button", { name: "Try again", exact: true }).click();
+    await expect(secondaryGroup.getByText("22%", { exact: true })).toBeVisible();
+    await expect(
+      secondaryGroup.getByText("Secondary quota unavailable", { exact: true }),
+    ).toHaveCount(0);
+    await secondaryGroup.getByTestId("usage-refresh").click();
+    await expect
+      .poll(() => forcedRefreshes(secondaryUsage))
+      .toEqual([
+        { forceRefresh: true },
+        { forceRefresh: true },
+        { forceRefresh: true, reportIds: ["alpha:a"] },
+      ]);
+    expect(forcedRefreshes(primaryUsage)).toEqual([{ forceRefresh: true }]);
+    await expect(primaryGroup.getByText("41%", { exact: true })).toBeVisible();
+
+    await secondary.restart();
+    await expect(secondaryGroup.getByText("22%", { exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(primaryGroup.getByText("41%", { exact: true })).toBeVisible();
+    await closeUsage(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openCompactSidebar(page);
+    await openUsageFromIcon(page);
+    await expect(secondaryGroup.getByText("22%", { exact: true })).toBeVisible();
+    await secondaryGroup.scrollIntoViewIfNeeded();
+    await expect(secondaryGroup.getByText("22%", { exact: true })).toBeInViewport();
+    const frame = await page.getByTestId("usage-modal").boundingBox();
+    expect(frame?.width).toBeLessThanOrEqual(390);
+    await qaScreenshot(page, "all-host-usage-compact");
+    await secondary.close();
+    await expect(
+      secondaryGroup.getByText("Connect to Secondary box to see usage", { exact: true }),
+    ).toBeVisible({ timeout: 30_000 });
+    await expect(primaryGroup.getByText("41%", { exact: true })).toBeVisible();
+  } finally {
+    releaseSecondary();
+    await secondary.close();
+  }
+});
+
+test("disabled usage providers follow each host's config and update without reloading", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const primaryServerId = getServerId();
+  const client = await connectDaemonClient<
+    Pick<DaemonClient, "connect" | "close" | "getDaemonConfig" | "patchDaemonConfig">
+  >({ clientIdPrefix: "usage-provider-visibility" });
+  const secondary = await startIsolatedHostDaemon(
+    `srv_usage_${randomUUID().replaceAll("-", "").slice(0, 12)}`,
+  );
+  const previous = (await client.getDaemonConfig()).config.providers.cursor;
+  try {
+    await client.patchDaemonConfig({
+      providers: {
+        cursor: {
+          extends: "acp",
+          label: "Cursor",
+          command: ["unused-e2e-cursor-agent", "acp"],
+          enabled: false,
+        },
+      },
+    });
+    await installUsageReportsFixture(page, {
+      lists: [[weeklyReport("codex", 31), weeklyReport("cursor", 12)]],
+    });
+    await installUsageReportsFixture(page, {
+      port: secondary.port,
+      lists: [[weeklyReport("cursor", 66)]],
+    });
+    await gotoAppShell(page);
+    await addConnectedHostAndReload(page, {
+      serverId: secondary.serverId,
+      label: "Secondary box",
+      port: secondary.port,
+    });
+    await expectPinnedUsage(page, ["31% Weekly"]);
+    await openUsageFromItem(page);
+    const primaryGroup = page.getByTestId(`usage-host-${primaryServerId}`);
+    const secondaryGroup = page.getByTestId(`usage-host-${secondary.serverId}`);
+    await expect(primaryGroup.getByText("codex plan", { exact: true })).toBeVisible();
+    await expect(primaryGroup.getByText("cursor plan", { exact: true })).toHaveCount(0);
+    await expect(secondaryGroup.getByText("cursor plan", { exact: true })).toBeVisible();
+    await expect(secondaryGroup.getByText("66%", { exact: true })).toBeVisible();
+
+    await client.patchDaemonConfig({ providers: { cursor: { enabled: true } } });
+    await expect(primaryGroup.getByText("cursor plan", { exact: true })).toBeVisible();
+    await expectPinnedUsage(page, ["31% Weekly", "12% Weekly"]);
+    await client.patchDaemonConfig({ providers: { cursor: { enabled: false } } });
+    await expect(primaryGroup.getByText("cursor plan", { exact: true })).toHaveCount(0);
+    await expectPinnedUsage(page, ["31% Weekly"]);
+    await refreshAllUsage(page);
+    await expect(page.getByTestId("usage-refresh-all")).toBeEnabled();
+    await expect(primaryGroup.getByText("cursor plan", { exact: true })).toHaveCount(0);
+    await expect(secondaryGroup.getByText("66%", { exact: true })).toBeVisible();
+    await qaScreenshot(page, "disabled-provider-host-isolation");
+
+    await addConnectedHostAndReload(page, {
+      serverId: secondary.serverId,
+      label: "Secondary box",
+      port: secondary.port,
+    });
+    await openUsageFromItem(page);
+    await expect(primaryGroup.getByText("codex plan", { exact: true })).toBeVisible();
+    await expect(primaryGroup.getByText("cursor plan", { exact: true })).toHaveCount(0);
+    await expect(secondaryGroup.getByText("cursor plan", { exact: true })).toBeVisible();
+  } finally {
+    await client.patchDaemonConfig(
+      previous ? { providers: { cursor: previous } } : { removeProviders: ["cursor"] },
+    );
+    await client.close();
+    await secondary.close();
+  }
+});

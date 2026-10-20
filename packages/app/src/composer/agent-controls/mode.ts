@@ -1,5 +1,24 @@
 import type { DraftAgentControlsProps } from "@/composer/agent-controls";
-import type { AgentMode } from "@getpaseo/protocol/agent-types";
+import type { AgentFeature, AgentMode } from "@getpaseo/protocol/agent-types";
+import { PLAN_MODE_FEATURE_ID } from "@/agent-controls/policy";
+
+export function resolveAgentModeShortcut(input: {
+  provider: string;
+  features: readonly AgentFeature[];
+  modeOptions: readonly AgentMode[];
+  selectedMode: string | null | undefined;
+}):
+  | { type: "feature"; featureId: string; value: boolean }
+  | { type: "mode"; modeId: string }
+  | null {
+  if (input.provider === "codex") {
+    const plan = input.features.find((feature) => feature.id === PLAN_MODE_FEATURE_ID);
+    if (plan?.type !== "toggle") return null;
+    return { type: "feature", featureId: plan.id, value: !plan.value };
+  }
+  const modeId = resolveNextAgentModeId(input);
+  return modeId ? { type: "mode", modeId } : null;
+}
 
 export function resolveNextAgentModeId({
   modeOptions,

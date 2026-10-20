@@ -153,6 +153,13 @@ export const zhCN: TranslationResources = {
       dictation: "听写",
       interruptBeforeVoice: "启动语音模式前请先中断 Agent",
     },
+    imageReview: {
+      commentNumber: "评论 {{number}}",
+      comment: "添加评论",
+      hint: "点击图片添加评论，拖动平移，滚动缩放。",
+      delete: "删除",
+      done: "完成",
+    },
     attachments: {
       addImage: "添加图片",
       pasteImage: "粘贴图片",
@@ -317,6 +324,14 @@ export const zhCN: TranslationResources = {
     },
   },
   message: {
+    imageCopy: "复制图片",
+    imageCopying: "正在复制图片...",
+    imageCopied: "图片已复制",
+    imageCopyFailed: "无法复制图片：{{reason}}",
+    imageAddToChat: "添加到聊天框",
+    imageAddingToChat: "正在添加图片...",
+    imageAddFailed: "无法添加图片：{{reason}}",
+    imageAddInvalid: "图片数据不可用",
     diagram: {
       diagram: "图表",
       zoomIn: "放大",
@@ -1142,6 +1157,8 @@ export const zhCN: TranslationResources = {
     },
   },
   sidebar: {
+    usageHost: "侧边栏额度主机",
+    refreshUsage: "刷新当前聊天额度",
     statusGroupAccessibility: "{{label}} 分组",
     statusBucket: {
       needsInput: "需要输入",
@@ -1421,7 +1438,9 @@ export const zhCN: TranslationResources = {
       loadFailed: "无法加载桌面 daemon 状态。",
     },
     updates: {
+      notificationOnly: "Paseo Review 仅提醒官方新版。需要合并官方代码并重新打包后更新定制版。",
       status: {
+        officialReleaseAvailable: "官方已发布 {{version}}。",
         checking: "正在检查 app 更新...",
         installing: "正在安装 app 更新...",
         upToDate: "App 已是最新版本。",
@@ -1441,6 +1460,7 @@ export const zhCN: TranslationResources = {
       },
       installError: "无法安装 desktop app 更新。",
       callout: {
+        officialReleaseTitle: "官方发布了新版本",
         installingTitle: "正在安装更新",
         failedTitle: "更新失败",
         availableTitle: "有可用更新",
