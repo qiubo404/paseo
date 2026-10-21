@@ -1,6 +1,7 @@
 import { formatTokenCount } from "@/components/context-window-meter.utils";
 import type { UsageDisplayAs } from "./preferences";
 import type { UsageBalanceUnit } from "./types";
+import { usageCopy } from "./copy";
 
 export function clampPct(value: number): number {
   return Math.max(0, Math.min(100, value));
@@ -13,6 +14,23 @@ export function formatPct(value: number): string {
 /** "31%" of the window used, or "69% left" of it. */
 export function formatDisplayPct(value: number, displayAs: UsageDisplayAs): string {
   return displayAs === "used" ? formatPct(value) : `${formatPct(value)} left`;
+}
+
+/** Sidebar reset countdown; a passed timestamp cannot tell us when the next cycle starts. */
+export function formatResetCountdown(
+  iso: string | null | undefined,
+  now: number = Date.now(),
+): string | null {
+  if (!iso) return null;
+  const remainingMs = Date.parse(iso) - now;
+  if (!Number.isFinite(remainingMs)) return null;
+  if (remainingMs <= 0) return usageCopy.pendingReset;
+  const minutes = Math.floor(remainingMs / 60_000);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  if (days > 0) return `${days}d ${hours % 24}h`;
+  if (hours > 0) return `${hours}h ${minutes % 60}m`;
+  return minutes > 0 ? `${minutes}m` : "<1m";
 }
 
 function relativeDuration(iso: string): string | null {

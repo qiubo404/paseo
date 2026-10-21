@@ -61,13 +61,14 @@ function sourceIcon(plugin: string): string {
   return readFileSync(path.join(PLUGINS_DIR, plugin, "icon.svg"), "utf8");
 }
 
-function inOneDay(): string {
-  return new Date(Date.now() + 24 * 60 * 60_000).toISOString();
+function inOneDay(now: number): string {
+  // Keep the displayed day away from its boundary while the browser clock advances.
+  return new Date(now + (24 * 60 + 30) * 60_000).toISOString();
 }
 
 /** Claude and Codex reports shaped like the built-in sources report them. */
-export function claudeAndCodexReports(): UsageReportEntry[] {
-  const fetchedAt = new Date().toISOString();
+export function claudeAndCodexReports(now: number = Date.now()): UsageReportEntry[] {
+  const fetchedAt = new Date(now).toISOString();
   return [
     {
       id: "claude:default",
@@ -86,7 +87,7 @@ export function claudeAndCodexReports(): UsageReportEntry[] {
             shortLabel: "5h",
             summary: true,
             usedPct: 31,
-            resetsAt: inOneDay(),
+            resetsAt: inOneDay(now),
           },
           {
             id: "weekly",
@@ -94,7 +95,7 @@ export function claudeAndCodexReports(): UsageReportEntry[] {
             shortLabel: "wk",
             summary: true,
             usedPct: 54,
-            resetsAt: inOneDay(),
+            resetsAt: inOneDay(now),
           },
         ],
       },
@@ -116,7 +117,7 @@ export function claudeAndCodexReports(): UsageReportEntry[] {
             shortLabel: "5h",
             summary: true,
             usedPct: 7,
-            resetsAt: inOneDay(),
+            resetsAt: inOneDay(now),
           },
           {
             id: "weekly",
@@ -124,7 +125,7 @@ export function claudeAndCodexReports(): UsageReportEntry[] {
             shortLabel: "wk",
             summary: true,
             usedPct: 12,
-            resetsAt: inOneDay(),
+            resetsAt: inOneDay(now),
           },
         ],
       },
@@ -147,10 +148,28 @@ export function usageModal(page: Page): Locator {
   return visible(page, "usage-modal-body");
 }
 
-/** Each pinned window as it reads: its percent and short label, "31% 5h". */
+/** Each pinned window as it reads: its percent and reset countdown, "31% 2h 15m". */
 export async function expectPinnedUsage(page: Page, windows: string[]): Promise<void> {
   const pinned = usageItem(page).getByTestId("sidebar-usage-pinned-window");
   await expect(pinned).toHaveText(windows);
+}
+
+export async function expectPinnedUsageFits(page: Page): Promise<void> {
+  // Read parent and children in one frame while the compact drawer is moving.
+  await expect
+    .poll(() =>
+      usageItem(page).evaluate((element) => {
+        const summary = element.getBoundingClientRect();
+        const windows = element.querySelectorAll('[data-testid="sidebar-usage-pinned-window"]');
+        if (windows.length === 0) return false;
+        for (const window of windows) {
+          const bounds = window.getBoundingClientRect();
+          if (bounds.left < summary.left || bounds.right > summary.right) return false;
+        }
+        return true;
+      }),
+    )
+    .toBe(true);
 }
 
 /** Without a summary window with data the footer has no Usage item, only the Usage icon. */

@@ -1,5 +1,29 @@
 import { describe, expect, it } from "vitest";
-import { formatAmount, formatResetLabel } from "./format";
+import { formatAmount, formatResetCountdown, formatResetLabel } from "./format";
+
+describe("formatResetCountdown", () => {
+  const now = Date.parse("2026-10-21T08:00:00.000Z");
+
+  it.each([
+    [3 * 24 * 60 + 8 * 60 + 15, "3d 8h"],
+    [24 * 60, "1d 0h"],
+    [2 * 60 + 15, "2h 15m"],
+    [60, "1h 0m"],
+    [15, "15m"],
+    [1, "1m"],
+    [0.5, "<1m"],
+    [0, "Pending reset"],
+    [-1, "Pending reset"],
+  ])("formats a reset %s minutes away as %s", (minutes, expected) => {
+    expect(formatResetCountdown(new Date(now + minutes * 60_000).toISOString(), now)).toBe(
+      expected,
+    );
+  });
+
+  it.each([null, undefined, "", "invalid"])("ignores missing or invalid reset time %s", (iso) => {
+    expect(formatResetCountdown(iso, now)).toBeNull();
+  });
+});
 
 describe("formatAmount", () => {
   it("groups thousands in the app's language", () => {

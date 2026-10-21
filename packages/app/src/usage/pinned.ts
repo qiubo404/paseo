@@ -1,4 +1,5 @@
-import { formatPct } from "./format";
+import { usageCopy } from "./copy";
+import { formatPct, formatResetCountdown } from "./format";
 import { displayPercent } from "./model";
 import { effectiveUsagePins, type UsagePreferences } from "./preferences";
 import { windowTone } from "./tone";
@@ -9,7 +10,7 @@ export interface PinnedUsageWindow {
   key: string;
   /** Accessible description, including the source, account, window and percent meaning. */
   label: string;
-  /** The window's short name ("5h"), empty for none, or its label when the source sends none. */
+  /** Reset countdown, falling back to the window's short name when no reset time is known. */
   shortLabel: string;
   /** The share shown, under the user's used/remaining preference. */
   percent: number;
@@ -25,7 +26,7 @@ export interface PinnedUsageSource {
 }
 
 /** How much of each window the one-line summary has room for. */
-export type PinnedUsageLayout = "meters" | "labels" | "percents";
+export type PinnedUsageLayout = "meters" | "labels";
 
 // A meter narrower than this is a sliver that reads as noise rather than a share.
 export const MIN_METER_WIDTH = 16;
@@ -33,21 +34,18 @@ export const MIN_METER_WIDTH = 16;
 export const METER_GAP = 4;
 
 /**
- * The richest layout that fits on one line: every window's meter, else its short label, else its
- * percent alone. Meters are all or none; a line never mixes them. Until the widths are known it
- * shows labels, which never flashes meters that turn out not to fit.
+ * Meters are all or none. Without enough room, labels wrap rather than losing reset times.
+ * Until widths are known, show labels so meters that do not fit never flash on screen.
  */
 export function choosePinnedUsageLayout(input: {
   available: number | null;
   labelsWidth: number | null;
-  percentsWidth: number | null;
   windowCount: number;
 }): PinnedUsageLayout {
-  const { available, labelsWidth, percentsWidth, windowCount } = input;
-  if (available === null || labelsWidth === null || percentsWidth === null) return "labels";
+  const { available, labelsWidth, windowCount } = input;
+  if (available === null || labelsWidth === null) return "labels";
   if (labelsWidth + windowCount * (MIN_METER_WIDTH + METER_GAP) <= available) return "meters";
-  if (labelsWidth <= available) return "labels";
-  return percentsWidth < labelsWidth ? "percents" : "labels";
+  return "labels";
 }
 
 function describe(entry: UsageReportEntry, windowLabel: string): string {
@@ -68,6 +66,7 @@ function groupBySource(reports: readonly UsageReportEntry[]): UsageReportEntry[]
 export function resolvePinnedUsage(
   reports: readonly UsageReportEntry[],
   preferences: UsagePreferences,
+  now: number = Date.now(),
 ): PinnedUsageSource[] {
   const pins = effectiveUsagePins(preferences, reports);
   const meaning = preferences.displayAs === "remaining" ? "left" : "used";
@@ -82,10 +81,17 @@ export function resolvePinnedUsage(
       .map((window) => {
         const percent = displayPercent(window, preferences.displayAs) ?? 0;
         const percentText = formatPct(percent);
+        const countdown = formatResetCountdown(window.resetsAt, now);
+        let resetDescription = countdown;
+        if (countdown && countdown !== usageCopy.pendingReset) {
+          resetDescription = usageCopy.resetsIn(countdown);
+        }
         return {
           key: `${entry.id}/${window.id}`,
-          label: `${describe(entry, window.label)} ${percentText} ${meaning}`,
-          shortLabel: window.shortLabel ?? window.label,
+          label: [`${describe(entry, window.label)} ${percentText} ${meaning}`, resetDescription]
+            .filter(Boolean)
+            .join(" · "),
+          shortLabel: countdown ?? window.shortLabel ?? window.label,
           percent,
           percentText,
           tone: windowTone(window),

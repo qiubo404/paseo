@@ -3,6 +3,7 @@ import {
   Fragment,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -17,6 +18,7 @@ import { extraMutedIconColorMapping } from "@/components/ui/icon-button-chrome";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { builtinSidebarNavLabelKey } from "@/sidebar-nav/model";
+import { useAppVisible } from "@/hooks/use-app-visible";
 import { useUsageDisplay } from "./display";
 import { useUsageHostId } from "./hosts";
 import { useSidebarUsageQuery } from "./queries";
@@ -36,7 +38,9 @@ import { UsageModal } from "./usage-modal";
 
 const ThemedRotateCw = withUnistyles(RotateCw);
 const ThemedLoadingSpinner = withUnistyles(LoadingSpinner);
-const SidebarUsageContext = createContext<ReturnType<typeof useSidebarUsageQuery> | null>(null);
+const SidebarUsageContext = createContext<
+  (ReturnType<typeof useSidebarUsageQuery> & { now: number }) | null
+>(null);
 
 function useSidebarUsage() {
   const usage = useContext(SidebarUsageContext);
@@ -46,7 +50,7 @@ function useSidebarUsage() {
 
 /** Each summary window with data on the usage host, under its source; empty while none has. */
 function useUsageSummary(): readonly PinnedUsageSource[] {
-  const { reports } = useSidebarUsage();
+  const { reports, now } = useSidebarUsage();
   const { preferences } = useUsageDisplay(reports);
   return useMemo(
     () =>
@@ -57,8 +61,9 @@ function useUsageSummary(): readonly PinnedUsageSource[] {
             : entry,
         ),
         preferences,
+        now,
       ),
-    [preferences, reports],
+    [preferences, reports, now],
   );
 }
 
@@ -152,6 +157,15 @@ const OpenSidebarUsageContext = createContext<(() => void) | null>(null);
  */
 export function UsageSidebarRoot({ children }: { children: ReactNode }) {
   const usage = useSidebarUsageQuery(useUsageHostId());
+  const visible = useAppVisible();
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    if (!visible) return;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, [visible]);
+  const summary = useMemo(() => ({ ...usage, now }), [usage, now]);
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const openUsage = useCallback(() => {
@@ -162,7 +176,7 @@ export function UsageSidebarRoot({ children }: { children: ReactNode }) {
   const unmountUsage = useCallback(() => setMounted(false), []);
 
   return (
-    <SidebarUsageContext.Provider value={usage}>
+    <SidebarUsageContext.Provider value={summary}>
       <OpenSidebarUsageContext.Provider value={openUsage}>
         {children}
         {mounted ? (
@@ -194,9 +208,8 @@ function layoutWidth(event: LayoutChangeEvent): number {
 }
 
 /**
- * One line: each account's icon, then per window a meter and "31% 5h". Off-screen copies measure
- * the line with labels and with percents alone; the richest layout that fits is shown, and what
- * it leaves out takes no space at all.
+ * Each account's icon, then a meter, percent and reset countdown per window. Measure the labels
+ * off screen; when meters do not fit, keep the reset times and allow the labels to wrap.
  */
 function PinnedUsageTrigger({
   label,
@@ -211,20 +224,15 @@ function PinnedUsageTrigger({
 }) {
   const [available, setAvailable] = useState<number | null>(null);
   const [labelsWidth, setLabelsWidth] = useState<number | null>(null);
-  const [percentsWidth, setPercentsWidth] = useState<number | null>(null);
   const handleAvailableLayout = useCallback((event: LayoutChangeEvent) => {
     setAvailable(layoutWidth(event));
   }, []);
   const handleLabelsLayout = useCallback((event: LayoutChangeEvent) => {
     setLabelsWidth(layoutWidth(event));
   }, []);
-  const handlePercentsLayout = useCallback((event: LayoutChangeEvent) => {
-    setPercentsWidth(layoutWidth(event));
-  }, []);
   const layout = choosePinnedUsageLayout({
     available,
     labelsWidth,
-    percentsWidth,
     windowCount: sources.reduce((count, source) => count + source.windows.length, 0),
   });
   return (
@@ -235,7 +243,10 @@ function PinnedUsageTrigger({
       style={triggerStyle}
       testID="sidebar-usage"
     >
-      <View style={styles.line} onLayout={handleAvailableLayout}>
+      <View
+        style={[styles.line, layout === "labels" && styles.wrappedLine]}
+        onLayout={handleAvailableLayout}
+      >
         {sources.length ? (
           <PinnedUsageLine sources={sources} layout={layout} />
         ) : (
@@ -253,9 +264,6 @@ function PinnedUsageTrigger({
       >
         <View style={styles.measured} onLayout={handleLabelsLayout}>
           <PinnedUsageLine sources={sources} layout="labels" measuring />
-        </View>
-        <View style={styles.measured} onLayout={handlePercentsLayout}>
-          <PinnedUsageLine sources={sources} layout="percents" measuring />
         </View>
       </View>
     </TooltipTrigger>
@@ -288,7 +296,10 @@ function PinnedUsageLine({
         return (
           <Fragment key={window.key}>
             {layout === "meters" ? (
-              <View style={[styles.meterSlot, leadStyle]}>
+              <View
+                style={[styles.meterSlot, leadStyle]}
+                testID={measuring ? undefined : "sidebar-usage-meter"}
+              >
                 <UsageMeter
                   percent={window.percent}
                   tone={window.tone}
@@ -303,7 +314,7 @@ function PinnedUsageLine({
               testID={measuring ? undefined : "sidebar-usage-pinned-window"}
             >
               {window.percentText}
-              {layout === "percents" || window.shortLabel === "" ? null : (
+              {window.shortLabel === "" ? null : (
                 <Text style={styles.windowLabel}>{` ${window.shortLabel}`}</Text>
               )}
             </Text>
@@ -344,6 +355,10 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     overflow: "hidden",
+  },
+  wrappedLine: {
+    flexWrap: "wrap",
+    rowGap: theme.spacing[1],
   },
   // Wide enough that nothing inside wraps or shrinks; each child reports its natural width.
   measure: {

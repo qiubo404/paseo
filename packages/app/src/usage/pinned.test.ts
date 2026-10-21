@@ -53,15 +53,15 @@ function preferences(
 }
 
 describe("choosePinnedUsageLayout", () => {
-  const widths = { labelsWidth: 200, percentsWidth: 120, windowCount: 2 };
+  const widths = { labelsWidth: 200, windowCount: 2 };
 
   it("shows meters only when every window's meter fits beside the labels", () => {
     expect(choosePinnedUsageLayout({ ...widths, available: 240 })).toBe("meters");
     expect(choosePinnedUsageLayout({ ...widths, available: 239 })).toBe("labels");
   });
 
-  it("drops the labels before it lets the line overflow", () => {
-    expect(choosePinnedUsageLayout({ ...widths, available: 199 })).toBe("percents");
+  it("keeps the labels without meters when the summary must wrap", () => {
+    expect(choosePinnedUsageLayout({ ...widths, available: 199 })).toBe("labels");
   });
 
   it("shows labels until the widths are measured", () => {
@@ -73,6 +73,67 @@ describe("choosePinnedUsageLayout", () => {
 });
 
 describe("resolvePinnedUsage", () => {
+  it("replaces cycle labels with each window's reset countdown without changing percentages", () => {
+    const now = Date.parse("2026-10-21T08:00:00.000Z");
+    const entry = report({
+      sourceId: "claude",
+      sourceLabel: "Claude",
+      windows: [
+        {
+          id: "session",
+          label: "Session",
+          shortLabel: "5h",
+          usedPct: 67,
+          summary: true,
+          resetsAt: new Date(now + 135 * 60_000).toISOString(),
+        },
+        {
+          id: "weekly",
+          label: "Weekly",
+          shortLabel: "wk",
+          usedPct: 21,
+          summary: true,
+          resetsAt: new Date(now + 80 * 60 * 60_000).toISOString(),
+        },
+      ],
+    });
+    const summary = (time: number, displayAs: UsagePreferences["displayAs"] = "used") =>
+      resolvePinnedUsage([entry], preferences(null, displayAs), time)[0]!.windows;
+
+    expect(
+      summary(now).map(({ shortLabel, percentText, label }) => ({
+        shortLabel,
+        percentText,
+        label,
+      })),
+    ).toEqual([
+      {
+        shortLabel: "2h 15m",
+        percentText: "67%",
+        label: "Claude Session 67% used · resets in 2h 15m",
+      },
+      {
+        shortLabel: "3d 8h",
+        percentText: "21%",
+        label: "Claude Weekly 21% used · resets in 3d 8h",
+      },
+    ]);
+    expect(summary(now + 60_000).map((window) => window.shortLabel)).toEqual(["2h 14m", "3d 7h"]);
+    expect(summary(now, "remaining").map((window) => window.percentText)).toEqual(["33%", "79%"]);
+    expect(summary(now + 135 * 60_000)[0]!.label).toBe("Claude Session 67% used · Pending reset");
+  });
+
+  it("retains the cycle label for invalid reset times", () => {
+    const entry = report({
+      sourceId: "claude",
+      sourceLabel: "Claude",
+      windows: [
+        { id: "session", label: "Session", shortLabel: "5h", usedPct: 67, resetsAt: "invalid" },
+      ],
+    });
+    expect(windows([entry], preferences(null))[0]!.shortLabel).toBe("5h");
+  });
+
   it("defaults to source-wide pins collected from each account", () => {
     const work = report({
       sourceId: "claude",

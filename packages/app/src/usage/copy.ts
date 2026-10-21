@@ -36,6 +36,8 @@ export const usageCopy = {
   displayAs: "Percentages",
   displayUsed: "Used",
   displayRemaining: "Remaining",
+  pendingReset: "Pending reset",
+  resetsIn: (countdown: string) => `resets in ${countdown}`,
   showInSidebar: "Summary in sidebar",
   showInSidebarHint: "Pinned windows show in the sidebar footer",
 } as const;
