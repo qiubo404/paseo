@@ -181,6 +181,7 @@ interface NewWorkspaceScreenProps {
   projectId?: string;
   displayName?: string;
   draftId?: string;
+  initialLaunchTarget?: LaunchTarget;
 }
 
 // A terminal launch sends argv, not a message: there is nothing to attach and
@@ -990,6 +991,7 @@ export function NewWorkspaceScreen(props: NewWorkspaceScreenProps) {
 
 function NewWorkspaceContent({
   draftId,
+  initialLaunchTarget,
   initialContext,
   projectPicker,
   saveProjectDefaults,
@@ -1061,7 +1063,9 @@ function NewWorkspaceContent({
   // reads live from preferences so the async load can't race a frozen
   // initializer. Both go through `resolveLaunchTarget`, so a profile deleted
   // daemon-side falls back to chat rather than leaving a dead selection.
-  const [manualLaunchTarget, setManualLaunchTarget] = useState<LaunchTarget | null>(null);
+  const [manualLaunchTarget, setManualLaunchTarget] = useState<LaunchTarget | undefined>(
+    initialLaunchTarget,
+  );
   const launchTarget = useMemo(
     () => resolveLaunchTarget(manualLaunchTarget ?? formPreferences.launchTarget, terminalProfiles),
     [manualLaunchTarget, formPreferences.launchTarget, terminalProfiles],

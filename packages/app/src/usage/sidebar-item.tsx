@@ -50,6 +50,7 @@ function useSidebarUsage() {
 
 /** Each summary window with data on the usage host, under its source; empty while none has. */
 function useUsageSummary(): readonly PinnedUsageSource[] {
+  const { t } = useTranslation();
   const { reports, now } = useSidebarUsage();
   const { preferences } = useUsageDisplay(reports);
   return useMemo(
@@ -62,8 +63,9 @@ function useUsageSummary(): readonly PinnedUsageSource[] {
         ),
         preferences,
         now,
+        t,
       ),
-    [preferences, reports, now],
+    [preferences, reports, now, t],
   );
 }
 
@@ -85,7 +87,7 @@ export function UsageSidebarItem() {
   const label = `${t(builtinSidebarNavLabelKey("usage"))}${usage.label ? ` · ${usage.label}` : ""}`;
   const openUsage = useOpenSidebarUsage();
   const sources = useUsageSummary();
-  const messages = usage.reports.flatMap((entry) => resolveUsageReport(entry).messages);
+  const messages = usage.reports.flatMap((entry) => resolveUsageReport(entry, t).messages);
   const error = usage.error ?? (messages.length ? messages.join("\n") : null);
   const status = error ?? (usage.loading ? usageCopy.loading : usageCopy.empty);
   const refreshLabel = t("sidebar.refreshUsage");

@@ -6,9 +6,10 @@ import type { UsageReportEntry } from "@getpaseo/protocol/messages";
 import type { DaemonClient } from "@getpaseo/client/internal/daemon-client";
 import { connectDaemonClient } from "../support/helpers/daemon-client-loader";
 import { expect, test } from "../support/fixtures";
-import { gotoAppShell } from "../support/helpers/app";
+import { gotoAppShell, openSettings } from "../support/helpers/app";
 import { addConnectedHostAndReload } from "../support/helpers/hosts";
 import { startIsolatedHostDaemon } from "../support/helpers/isolated-host-daemon";
+import { openSettingsSection } from "../support/helpers/settings";
 import { getServerId } from "../support/helpers/server-id";
 import { openAgentRoute, seedMockAgentWorkspace } from "../support/helpers/mock-agent";
 import { seedSidebarFooterPreferences } from "../support/helpers/sidebar-nav-settings";
@@ -136,7 +137,7 @@ async function refreshUsageAndWaitForReports(page: Page, usage: UsageReportsFixt
   await refreshAllUsage(page);
   await usage.waitForListRequests(requestCount + 1);
   const group = page.getByTestId(`usage-host-${getServerId()}`);
-  await expect(group.getByText("41%", { exact: true })).toBeVisible();
+  await expect(group.getByText("41% used", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Refresh all", exact: true })).toBeEnabled();
 }
 
@@ -321,7 +322,7 @@ test.describe("usage modal", () => {
     await expect(group.getByText("Alpha plan", { exact: true })).toBeVisible({ timeout: 10_000 });
     await expect(hostFilter(page)).toHaveCount(0);
     await qaScreenshot(page, "usage-modal-one-host");
-    await expect(group.getByText("31%")).toBeVisible();
+    await expect(group.getByText("31% used")).toBeVisible();
     await expect(group.getByText("Beta plan", { exact: true })).toBeVisible();
     await expect(group.getByText("Unavailable", { exact: true })).toBeVisible();
 
@@ -383,15 +384,15 @@ test.describe("usage modal", () => {
     await gotoAppShell(page);
     await openUsageFromItem(page);
     const group = page.getByTestId(`usage-host-${serverId}`);
-    await expect(group.getByText("31%")).toBeVisible({ timeout: 10_000 });
+    await expect(group.getByText("31% used")).toBeVisible({ timeout: 10_000 });
 
     const alphaRefresh = group.getByTestId("usage-refresh").first();
     await alphaRefresh.click();
     await expect
       .poll(() => forcedRefreshes(usage))
       .toEqual([{ forceRefresh: true, reportIds: ["alpha:a"] }]);
-    await expect(group.getByText("58%")).toBeVisible();
-    await expect(group.getByText("12%")).toBeVisible();
+    await expect(group.getByText("58% used")).toBeVisible();
+    await expect(group.getByText("12% used")).toBeVisible();
 
     await group.getByTestId("usage-refresh").nth(1).hover();
     await expect(page.getByTestId("usage-freshness-tooltip")).toHaveText("Updated 2h ago");
@@ -473,7 +474,7 @@ test.describe("usage modal", () => {
       await openUsageFromItem(page);
       await expect(page.getByTestId(`usage-host-${primaryServerId}`)).toBeVisible();
       await expect(
-        page.getByTestId(`usage-host-${secondary.serverId}`).getByText("12%"),
+        page.getByTestId(`usage-host-${secondary.serverId}`).getByText("12% used"),
       ).toBeVisible({ timeout: 30_000 });
       await expect(hostFilter(page)).toHaveCount(0);
 
@@ -488,12 +489,12 @@ test.describe("usage modal", () => {
       await hostFilter(page).click();
       await page.getByTestId(`usage-host-filter-item-${secondary.serverId}`).click();
       await expect(
-        page.getByTestId(`usage-host-${secondary.serverId}`).getByText("12%"),
+        page.getByTestId(`usage-host-${secondary.serverId}`).getByText("12% used"),
       ).toBeVisible({ timeout: 30_000 });
       await expect(hostFilter(page)).toContainText("Secondary box");
       await closeUsageOptions(page);
       await expect(
-        page.getByTestId(`usage-host-${primaryServerId}`).getByText("31%"),
+        page.getByTestId(`usage-host-${primaryServerId}`).getByText("31% used"),
       ).toBeVisible();
       await qaScreenshot(page, "usage-modal-picked-host");
       await expectPinnedUsage(page, ["12% Weekly"]);
@@ -507,7 +508,7 @@ test.describe("usage modal", () => {
       await expectPinnedUsage(page, ["12% Weekly"]);
       await openUsageFromItem(page);
       await expect(
-        page.getByTestId(`usage-host-${secondary.serverId}`).getByText("12%"),
+        page.getByTestId(`usage-host-${secondary.serverId}`).getByText("12% used"),
       ).toBeVisible({ timeout: 30_000 });
     } finally {
       await secondary.close().catch(() => undefined);
@@ -673,7 +674,7 @@ for (const theme of ["light", "dark"] as const) {
       await expect(screen.getByText("69% left")).toBeVisible();
       await showUsageAs(page, "used");
       await expect(pinRow(screen, "Claude", "Session")).toHaveAccessibleName(
-        /^Pin Claude Session, 31% · resets /,
+        /^Pin Claude Session, 31% used · resets /,
       );
       await openUsageOptions(page);
       await closeUsageOptions(page);
@@ -736,7 +737,7 @@ test("an account with all logins failing shows each harness and remedy, then onl
       },
     ]);
     await refreshLoginUsage(page);
-    await expectLoginUsageOnly(page, "42%");
+    await expectLoginUsageOnly(page, "42% used");
   } finally {
     await fixture.cleanup();
   }
@@ -759,6 +760,7 @@ for (const compact of [false, true]) {
   }) => {
     const fixture = await installLoginUsage({ status: "error", error: "Initial failure" });
     try {
+      await page.clock.install();
       await page.setViewportSize(
         compact ? { width: 390, height: 844 } : { width: 1440, height: 900 },
       );
@@ -766,7 +768,10 @@ for (const compact of [false, true]) {
       if (compact) await openCompactSidebar(page);
       await openUsageFromIcon(page);
       await expectLoginErrors(page, ["Claude: Initial failure"]);
-      await expectLoginUsageFreshness(page, "No successful update", compact);
+      await test.step("developer errors do not interrupt freshness inspection", async () => {
+        await page.evaluate(() => console.error("E2E: developer toast while Usage is open"));
+        await expectLoginUsageFreshness(page, "No successful update", compact);
+      });
 
       await fixture.setReport({
         status: "available",
@@ -775,7 +780,8 @@ for (const compact of [false, true]) {
       // Move only the browser clock; real daemon fetches continue using the host clock.
       await page.clock.setFixedTime(new Date(Date.now() + 3_900_000));
       await refreshLoginUsage(page);
-      await expectLoginUsageOnly(page, "42%");
+      await expectLoginUsageOnly(page, "42% used");
+      await advanceUsageClock(page, 60_000);
       await expectLoginUsageFreshness(page, "Updated 1h ago", compact);
 
       await fixture.setReport({ status: "error", error: "Rate limited" });
@@ -800,8 +806,9 @@ for (const compact of [false, true]) {
       });
       await page.clock.setFixedTime(new Date(Date.now() + 150_000));
       await refreshLoginUsage(page);
-      await expectLoginUsageOnly(page, "43%");
-      await expect(page.getByText("42%", { exact: true })).toHaveCount(0);
+      await expectLoginUsageOnly(page, "43% used");
+      await advanceUsageClock(page, 60_000);
+      await expect(page.getByText("42% used", { exact: true })).toHaveCount(0);
       await expectLoginUsageFreshness(page, "Updated 2m ago", compact);
     } finally {
       await fixture.cleanup();
@@ -811,7 +818,7 @@ for (const compact of [false, true]) {
 
 async function expectRetainedLoginUsage(page: Page, message: string) {
   const card = page.getByTestId("usage-report-login-journey:account");
-  await expect(card.getByText(/^42%(?:$| ·)/)).toBeVisible();
+  await expect(card.getByText(/^42% used(?:$| ·)/)).toBeVisible();
   await expect(card.getByTestId("usage-login-error")).toHaveText(message);
   await expect(card.getByText("Reset time passed", { exact: false })).toBeVisible();
 }
@@ -861,17 +868,17 @@ test("all-host usage isolates slow requests, refresh failures, card IDs and reco
     await openUsageFromItem(page);
     const primaryGroup = page.getByTestId(`usage-host-${primaryServerId}`);
     const secondaryGroup = page.getByTestId(`usage-host-${secondary.serverId}`);
-    await expect(primaryGroup.getByText("31%", { exact: true })).toBeVisible();
+    await expect(primaryGroup.getByText("31% used", { exact: true })).toBeVisible();
     await expect(secondaryGroup.getByText("Loading usage...", { exact: true })).toBeVisible();
-    await expect(secondaryGroup.getByText("31%", { exact: true })).toHaveCount(0);
+    await expect(secondaryGroup.getByText("31% used", { exact: true })).toHaveCount(0);
     releaseSecondary();
-    await expect(secondaryGroup.getByText("12%", { exact: true })).toBeVisible();
+    await expect(secondaryGroup.getByText("12% used", { exact: true })).toBeVisible();
     await expect(page.getByTestId("usage-refresh-all")).toBeEnabled();
 
     secondaryMode = "fail";
     await refreshAllUsage(page);
-    await expect(primaryGroup.getByText("41%", { exact: true })).toBeVisible();
-    await expect(secondaryGroup.getByText("12%", { exact: true })).toBeVisible();
+    await expect(primaryGroup.getByText("41% used", { exact: true })).toBeVisible();
+    await expect(secondaryGroup.getByText("12% used", { exact: true })).toBeVisible();
     await expect(
       secondaryGroup.getByText("Secondary quota unavailable", { exact: true }),
     ).toBeVisible();
@@ -881,7 +888,7 @@ test("all-host usage isolates slow requests, refresh failures, card IDs and reco
 
     secondaryMode = "ready";
     await secondaryGroup.getByRole("button", { name: "Try again", exact: true }).click();
-    await expect(secondaryGroup.getByText("22%", { exact: true })).toBeVisible();
+    await expect(secondaryGroup.getByText("22% used", { exact: true })).toBeVisible();
     await expect(
       secondaryGroup.getByText("Secondary quota unavailable", { exact: true }),
     ).toHaveCount(0);
@@ -894,18 +901,20 @@ test("all-host usage isolates slow requests, refresh failures, card IDs and reco
         { forceRefresh: true, reportIds: ["alpha:a"] },
       ]);
     expect(forcedRefreshes(primaryUsage)).toEqual([{ forceRefresh: true }]);
-    await expect(primaryGroup.getByText("41%", { exact: true })).toBeVisible();
+    await expect(primaryGroup.getByText("41% used", { exact: true })).toBeVisible();
 
     await secondary.restart();
-    await expect(secondaryGroup.getByText("22%", { exact: true })).toBeVisible({ timeout: 30_000 });
-    await expect(primaryGroup.getByText("41%", { exact: true })).toBeVisible();
+    await expect(secondaryGroup.getByText("22% used", { exact: true })).toBeVisible({
+      timeout: 30_000,
+    });
+    await expect(primaryGroup.getByText("41% used", { exact: true })).toBeVisible();
     await closeUsage(page);
     await page.setViewportSize({ width: 390, height: 844 });
     await openCompactSidebar(page);
     await openUsageFromIcon(page);
-    await expect(secondaryGroup.getByText("22%", { exact: true })).toBeVisible();
+    await expect(secondaryGroup.getByText("22% used", { exact: true })).toBeVisible();
     await secondaryGroup.scrollIntoViewIfNeeded();
-    await expect(secondaryGroup.getByText("22%", { exact: true })).toBeInViewport();
+    await expect(secondaryGroup.getByText("22% used", { exact: true })).toBeInViewport();
     const frame = await page.getByTestId("usage-modal").boundingBox();
     expect(frame?.width).toBeLessThanOrEqual(390);
     await qaScreenshot(page, "all-host-usage-compact");
@@ -913,7 +922,7 @@ test("all-host usage isolates slow requests, refresh failures, card IDs and reco
     await expect(
       secondaryGroup.getByText("Connect to Secondary box to see usage", { exact: true }),
     ).toBeVisible({ timeout: 30_000 });
-    await expect(primaryGroup.getByText("41%", { exact: true })).toBeVisible();
+    await expect(primaryGroup.getByText("41% used", { exact: true })).toBeVisible();
   } finally {
     releaseSecondary();
     await secondary.close();
@@ -963,7 +972,7 @@ test("disabled usage providers follow each host's config and update without relo
     await expect(primaryGroup.getByText("codex plan", { exact: true })).toBeVisible();
     await expect(primaryGroup.getByText("cursor plan", { exact: true })).toHaveCount(0);
     await expect(secondaryGroup.getByText("cursor plan", { exact: true })).toBeVisible();
-    await expect(secondaryGroup.getByText("66%", { exact: true })).toBeVisible();
+    await expect(secondaryGroup.getByText("66% used", { exact: true })).toBeVisible();
 
     await client.patchDaemonConfig({ providers: { cursor: { enabled: true } } });
     await expect(primaryGroup.getByText("cursor plan", { exact: true })).toBeVisible();
@@ -974,7 +983,7 @@ test("disabled usage providers follow each host's config and update without relo
     await refreshAllUsage(page);
     await expect(page.getByTestId("usage-refresh-all")).toBeEnabled();
     await expect(primaryGroup.getByText("cursor plan", { exact: true })).toHaveCount(0);
-    await expect(secondaryGroup.getByText("66%", { exact: true })).toBeVisible();
+    await expect(secondaryGroup.getByText("66% used", { exact: true })).toBeVisible();
     await qaScreenshot(page, "disabled-provider-host-isolation");
 
     await addConnectedHostAndReload(page, {
@@ -994,3 +1003,83 @@ test("disabled usage providers follow each host's config and update without relo
     await secondary.close();
   }
 });
+async function switchToJapanese(page: Page) {
+  await page.getByRole("button", { name: "Close", exact: true }).click();
+  await openSettings(page);
+  await openSettingsSection(page, "general");
+  await page.getByRole("button", { name: "System", exact: true }).click();
+  await page.getByRole("menuitem", { name: "日本語 - Japanese", exact: true }).click();
+  await page.getByRole("button", { name: "戻る", exact: true }).click();
+}
+
+async function openJapaneseUsage(page: Page) {
+  await page.getByRole("button", { name: "使用状況", exact: true }).click();
+  await expect(page.getByTestId("usage-modal").first()).toBeVisible();
+}
+
+test("usage percentages state their meaning and follow the selected language", async ({ page }) => {
+  test.setTimeout(120_000);
+  const login = await installLoginUsage({
+    status: "available",
+    windows: [{ id: "session", label: "Session", usedPct: 70, summary: true }],
+  });
+  try {
+    await gotoAppShell(page);
+    await openUsageFromIcon(page);
+    await expect(page.getByText("70% used", { exact: true })).toBeVisible();
+    await switchToJapanese(page);
+    await expect(usageItem(page)).toHaveAccessibleName(/Claude セッション 70% 使用済み/);
+    await openJapaneseUsage(page);
+    await expect(page.getByText("70% 使用済み", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "すべて更新", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "設定", exact: true }).last().click();
+    await expect(page.getByText("割合", { exact: true })).toBeVisible();
+    await expect(page.getByText("使用済み", { exact: true })).toBeVisible();
+    await expect(page.getByText("残り", { exact: true })).toBeVisible();
+  } finally {
+    await login.cleanup();
+  }
+});
+
+test("open usage clocks advance without refreshing or reopening", async ({ page }) => {
+  test.setTimeout(120_000);
+  const now = new Date();
+  const reset = new Date(now.getTime() + 30.5 * 60_000).toISOString();
+  const login = await installLoginUsage({
+    status: "available",
+    windows: [
+      { id: "session", label: "Session", usedPct: 42, resetsAt: reset },
+      { id: "weekly", label: "Weekly", usedPct: 80, runsOutAt: reset, shortfallPct: 10 },
+    ],
+    balances: [{ id: "credits", label: "Credits", unit: "usd", remaining: 12, resetsAt: reset }],
+  });
+  try {
+    await openCompactUsageWithClock(page, now);
+    const card = page.getByTestId("usage-report-login-journey:account");
+    await expect(card.getByTestId("usage-freshness")).toHaveText("Updated just now");
+    await expect(card.getByText("resets 30m", { exact: false }).first()).toBeVisible();
+    // The shared minute clock is wall-aligned, and the daemon timestamps use real time.
+    // After two browser minutes the latest displayed tick is one or two minutes old.
+    await advanceUsageClock(page, 120_000);
+    await expect(card.getByTestId("usage-freshness")).toHaveText(/^Updated [12]m ago$/);
+    await expect(card.getByText(/resets (28|29)m/).first()).toBeVisible();
+    await expect(card.getByText(/runs out (28|29)m/)).toBeVisible();
+    await expect(card.getByTestId("provider-usage-balance-credits-reset")).toHaveText(
+      /^resets (28|29)m$/,
+    );
+  } finally {
+    await login.cleanup();
+  }
+});
+
+async function openCompactUsageWithClock(page: Page, now: Date) {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.clock.install({ time: now });
+  await gotoAppShell(page);
+  await openCompactSidebar(page);
+  await openUsageFromIcon(page);
+}
+
+async function advanceUsageClock(page: Page, milliseconds: number) {
+  await page.clock.fastForward(milliseconds);
+}

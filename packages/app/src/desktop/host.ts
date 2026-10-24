@@ -126,7 +126,7 @@ export interface DesktopEventsBridge {
 }
 
 export interface DesktopAgentNavigationBridge {
-  ready?: () => Promise<{ serverId: string; agentId: string } | null>;
+  ready?: () => Promise<import("@getpaseo/protocol/agent-deep-link").DesktopDeepLinkTarget | null>;
 }
 
 export type DesktopBrowserShortcutEvent =

@@ -183,3 +183,71 @@ test("fullscreen creation returns inline and keeps submission locked when reopen
     await project.cleanup();
   }
 });
+
+test("prefills independent new-chat drafts without sending or overwriting edits", async ({
+  page,
+}) => {
+  const project = await seedWorkspace({ repoPrefix: "new-chat-prefill-" });
+  const other = await seedWorkspace({ repoPrefix: "new-chat-other-project-" });
+  try {
+    await gotoAppShell(page);
+    await waitForSidebarHydration(page);
+    await openNewWorkspaceComposer(page, {
+      projectKey: other.projectKey,
+      projectDisplayName: other.projectDisplayName,
+    });
+    const beforeAgents = await project.client.fetchAgents();
+    const beforeWorkspaces = await project.client.fetchWorkspaces();
+    const prompt = "/hm-dev fxsj\u00a0";
+    const route = (draftId: string) =>
+      `/new?${new URLSearchParams({
+        serverId: getServerId(),
+        dir: project.repoPath,
+        draftId,
+        prompt,
+      })}`;
+    await page.goto(route("prefill-first"));
+    await expectNewWorkspaceDraft(page, prompt);
+    const input = composerLocator(page);
+    await expect(input).toBeFocused();
+    await expect
+      .poll(() =>
+        input.evaluate((element) => {
+          if (!(element instanceof HTMLTextAreaElement))
+            throw new Error("Composer must be a textarea");
+          return { start: element.selectionStart, end: element.selectionEnd };
+        }),
+      )
+      .toEqual({ start: prompt.length, end: prompt.length });
+    await page.keyboard.insertText("补充说明");
+    await expectNewWorkspaceDraft(page, prompt + "补充说明");
+    await expectNewWorkspaceProjectSelected(page, project.projectDisplayName);
+    await fillNewWorkspaceDraft(page, "edited first draft");
+    await page.reload();
+    await expectNewWorkspaceDraft(page, "edited first draft");
+    await page.goto(route("prefill-second"));
+    await expectNewWorkspaceDraft(page, prompt);
+    await page.goto(route("prefill-first"));
+    await expectNewWorkspaceDraft(page, "edited first draft");
+    const unavailable = new URLSearchParams({
+      serverId: getServerId(),
+      dir: "/unregistered-project",
+      prompt,
+      draftId: "prefill-unavailable",
+    });
+    await page.goto(`/new?${unavailable}`);
+    await expect(
+      page.getByText(
+        "This project is unavailable on the selected host. Choose a host for this project.",
+        { exact: true },
+      ),
+    ).toBeVisible();
+    expect((await project.client.fetchAgents()).entries).toEqual(beforeAgents.entries);
+    expect((await project.client.fetchWorkspaces()).entries.map((entry) => entry.id)).toEqual(
+      beforeWorkspaces.entries.map((entry) => entry.id),
+    );
+  } finally {
+    await other.cleanup();
+    await project.cleanup();
+  }
+});

@@ -104,12 +104,13 @@ import { runDesktopStartup } from "./desktop-startup.js";
 import { registerBrowserAutomationIpc } from "./features/browser-automation/ipc.js";
 import { BrowserKeyboard } from "./features/browser-keyboard/index.js";
 import { installAppUpdateOnQuit } from "./features/auto-updater.js";
+import { type DesktopDeepLinkTarget } from "@getpaseo/protocol/agent-deep-link";
 import {
-  buildAgentDeepLinkRoute,
-  parseAgentDeepLink,
-  type AgentDeepLinkTarget,
-} from "@getpaseo/protocol/agent-deep-link";
-import { AgentNavigationInbox, parseAgentDeepLinkFromArgv } from "./agent-navigation.js";
+  AgentNavigationInbox,
+  parseAgentDeepLinkFromArgv,
+  parseDesktopDeepLink,
+  desktopDeepLinkRoute,
+} from "./agent-navigation.js";
 
 const DEV_SERVER_URL = process.env.EXPO_DEV_URL ?? "http://localhost:8081";
 const IS_REVIEW_BUILD = app.getVersion().includes("-review.");
@@ -392,7 +393,7 @@ let pendingAgentNavigation = parseAgentDeepLinkFromArgv(process.argv);
 // webContents id, so deep-linked windows (second-instance launches, the
 // in-app "Open in new window" action) land on the right project without
 // racing a global.
-let desktopWindowOwner: DesktopWindowOwner<AgentDeepLinkTarget>;
+let desktopWindowOwner: DesktopWindowOwner<DesktopDeepLinkTarget>;
 
 if (PASEO_DEBUG) {
   log.info("[open-project] argv:", process.argv);
@@ -821,7 +822,7 @@ async function createWindow(
   return mainWindow;
 }
 
-function ownedDesktopWindow(win: BrowserWindow): OwnedDesktopWindow<AgentDeepLinkTarget> {
+function ownedDesktopWindow(win: BrowserWindow): OwnedDesktopWindow<DesktopDeepLinkTarget> {
   return {
     webContentsId: win.webContents.id,
     isDestroyed: () => win.isDestroyed(),
@@ -834,7 +835,7 @@ function ownedDesktopWindow(win: BrowserWindow): OwnedDesktopWindow<AgentDeepLin
   };
 }
 
-desktopWindowOwner = createDesktopWindowOwner<AgentDeepLinkTarget>({
+desktopWindowOwner = createDesktopWindowOwner<DesktopDeepLinkTarget>({
   async create(input) {
     const win = await createWindow({
       initialRoute: input.initialRoute,
@@ -850,7 +851,7 @@ desktopWindowOwner = createDesktopWindowOwner<AgentDeepLinkTarget>({
     if (!win) return null;
     return ownedDesktopWindow(win);
   },
-  agentRoute: buildAgentDeepLinkRoute,
+  agentRoute: desktopDeepLinkRoute,
   deliverAgent: (webContentsId, target) =>
     agentNavigationInbox.deliverOrQueue(webContentsId, target),
 });
@@ -860,7 +861,7 @@ desktopWindowOwner = createDesktopWindowOwner<AgentDeepLinkTarget>({
 // ---------------------------------------------------------------------------
 
 function receiveAgentDeepLink(input: string): void {
-  const target = parseAgentDeepLink(input);
+  const target = parseDesktopDeepLink(input);
   if (!target) {
     return;
   }
@@ -1016,7 +1017,7 @@ async function bootstrap(): Promise<void> {
   const initialAgentNavigation = pendingAgentNavigation;
   pendingAgentNavigation = null;
   await desktopWindowOwner.openPrimary({
-    initialRoute: initialAgentNavigation ? buildAgentDeepLinkRoute(initialAgentNavigation) : null,
+    initialRoute: initialAgentNavigation ? desktopDeepLinkRoute(initialAgentNavigation) : null,
     pendingProjectPath: pendingOpenProjectPath,
   });
   pendingOpenProjectPath = null;

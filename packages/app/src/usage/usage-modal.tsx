@@ -28,6 +28,7 @@ interface UsageModalProps {
  * shows every configured host independently, with Refresh all and Settings in its title row.
  */
 export function UsageModal(props: UsageModalProps) {
+  const { t } = useTranslation();
   const { groups, refreshHost, refreshAll, isRefreshing, canRefresh } = useAllHostsUsage();
   const controls = useMemo(
     () => (
@@ -41,7 +42,7 @@ export function UsageModal(props: UsageModalProps) {
   if (groups.length === 0) {
     return (
       <UsageModalFrame {...props}>
-        <UsageMessage text={usageCopy.noHosts} />
+        <UsageMessage text={t("providerUsage.noHosts")} />
       </UsageModalFrame>
     );
   }

@@ -1323,6 +1323,9 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
           focusIntentRef.current = true;
           if (paneFocusedRef.current) textInputRef.current?.focus();
         }
+      } else {
+        // A fresh editor starts after its prefilled text; retained edits keep their caret.
+        textInputRef.current?.setSelection(selectionRef.current);
       }
       return () => {
         editingSession.retainEditor({

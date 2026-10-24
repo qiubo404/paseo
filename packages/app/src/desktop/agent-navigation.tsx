@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { router } from "expo-router";
 import { listenToDesktopEvent } from "@/desktop/electron/events";
 import { getDesktopHost } from "@/desktop/host";
 import { useStableEvent } from "@/hooks/use-stable-event";
@@ -7,10 +8,29 @@ import { navigateToAgent } from "@/utils/navigate-to-agent";
 interface OpenAgentEventPayload {
   serverId?: unknown;
   agentId?: unknown;
+  path?: unknown;
+  prompt?: unknown;
+  draftId?: unknown;
 }
 
 export function AgentNavigationListener() {
   const openAgent = useStableEvent((payload: OpenAgentEventPayload | null) => {
+    if (
+      typeof payload?.path === "string" &&
+      typeof payload.prompt === "string" &&
+      typeof payload.draftId === "string"
+    ) {
+      router.navigate({
+        pathname: "/new",
+        params: {
+          dir: payload.path,
+          prompt: payload.prompt,
+          draftId: payload.draftId,
+          local: "1",
+        },
+      });
+      return;
+    }
     const serverId = typeof payload?.serverId === "string" ? payload.serverId.trim() : "";
     const agentId = typeof payload?.agentId === "string" ? payload.agentId.trim() : "";
     if (!serverId || !agentId) {

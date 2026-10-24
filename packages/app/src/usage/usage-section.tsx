@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { Text, View } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { Alert } from "@/components/ui/alert";
@@ -59,19 +60,25 @@ export function UsageBody({
   const retryConfig = useCallback(() => {
     void queryClient.refetchQueries({ queryKey: daemonConfigQueryKey(serverId) });
   }, [queryClient, serverId]);
+  const { t } = useTranslation();
   if (view.kind === "unavailable") {
     return <UsageMessage text={view.message} />;
   }
 
   if (view.kind === "loading") {
-    return <UsageMessage text={usageCopy.loading} />;
+    return <UsageMessage text={t("providerUsage.loading")} />;
   }
 
   if (view.kind === "error") {
     return (
-      <Alert size="sm" variant="error" title={usageCopy.errorTitle} description={view.message}>
+      <Alert
+        size="sm"
+        variant="error"
+        title={t("providerUsage.errorTitle")}
+        description={view.message}
+      >
         <Button variant="outline" size="sm" onPress={onRefresh}>
-          {usageCopy.retry}
+          {t("providerUsage.retry")}
         </Button>
       </Alert>
     );

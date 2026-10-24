@@ -1,5 +1,12 @@
 import { usageCopy } from "./copy";
-import { formatPct, formatResetCountdown } from "./format";
+import type { TFunction } from "i18next";
+import { i18n } from "@/i18n/i18next";
+import {
+  formatPct,
+  formatDisplayPct,
+  formatProviderUsageLabel,
+  formatResetCountdown,
+} from "./format";
 import { displayPercent } from "./model";
 import { effectiveUsagePins, type UsagePreferences } from "./preferences";
 import { windowTone } from "./tone";
@@ -67,9 +74,9 @@ export function resolvePinnedUsage(
   reports: readonly UsageReportEntry[],
   preferences: UsagePreferences,
   now: number = Date.now(),
+  t: TFunction = i18n.t,
 ): PinnedUsageSource[] {
   const pins = effectiveUsagePins(preferences, reports);
-  const meaning = preferences.displayAs === "remaining" ? "left" : "used";
   return groupBySource(reports).flatMap((entry) => {
     if (entry.report.status !== "available") return [];
     const windows = entry.report.windows
@@ -88,10 +95,14 @@ export function resolvePinnedUsage(
         }
         return {
           key: `${entry.id}/${window.id}`,
-          label: [`${describe(entry, window.label)} ${percentText} ${meaning}`, resetDescription]
+          label: [
+            `${describe(entry, formatProviderUsageLabel(window.id, window.label, t))} ${formatDisplayPct(percent, preferences.displayAs, undefined, t)}`,
+            resetDescription,
+          ]
             .filter(Boolean)
             .join(" · "),
-          shortLabel: countdown ?? window.shortLabel ?? window.label,
+          shortLabel:
+            countdown ?? window.shortLabel ?? formatProviderUsageLabel(window.id, window.label, t),
           percent,
           percentText,
           tone: windowTone(window),

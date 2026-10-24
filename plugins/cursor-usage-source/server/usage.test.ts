@@ -119,6 +119,72 @@ describe("cursor usage source", () => {
     if (!report) throw new Error(`Missing usage source ${id}`);
     return report;
   }
+  it("shows the current percentage-based plan usage without an empty dollar balance", async () => {
+    process.env["CURSOR_ACCESS_TOKEN"] = "cursor_test_token";
+    const report = await fetchUsage({ store: "env", locator: "CURSOR_ACCESS_TOKEN" }, async () =>
+      jsonResponse({
+        billingCycleStart: "1792661832396",
+        billingCycleEnd: "1793266632396",
+        planUsage: {
+          remainingBonus: false,
+          autoPercentUsed: 28.255687973997833,
+          apiPercentUsed: 0,
+          totalPercentUsed: 28.255687973997833,
+        },
+        spendLimitUsage: { individualLimit: 5000, individualRemaining: 5000, limitType: "user" },
+      }),
+    );
+    expect(report).toMatchObject({
+      status: "available",
+      windows: [
+        {
+          id: "plan_usage",
+          label: "Total",
+          summary: true,
+          usedPct: 28.255687973997833,
+          remainingPct: 100 - 28.255687973997833,
+          resetsAt: "2026-10-29T09:37:12.396Z",
+        },
+        { id: "cursor_usage", usedPct: 28.255687973997833 },
+        { id: "third_party_usage", usedPct: 0 },
+      ],
+      balances: [],
+    });
+  });
+
+  it.each([0, 100, 125])(
+    "preserves a reported %i percent and pins the billing cycle in the sidebar",
+    async (usedPct) => {
+      process.env["CURSOR_ACCESS_TOKEN"] = "cursor_test_token";
+      const report = await fetchUsage({ store: "env", locator: "CURSOR_ACCESS_TOKEN" }, async () =>
+        jsonResponse({
+          planUsage: { totalPercentUsed: usedPct },
+          billingCycleEnd: "1793266632396",
+        }),
+      );
+      expect(report).toMatchObject({
+        status: "available",
+        windows: [{ usedPct, remainingPct: Math.max(0, 100 - usedPct) }],
+        balances: [],
+      });
+      const { resolvePinnedUsage } = await import("../../../packages/app/src/usage/pinned.js");
+      const pinned = resolvePinnedUsage(
+        [
+          {
+            id: "cursor:account",
+            sourceId: "cursor",
+            sourceLabel: "Cursor",
+            account: {},
+            fetchedAt: new Date().toISOString(),
+            report,
+          },
+        ],
+        { displayAs: "used", pins: null, serverId: null },
+      );
+      expect(pinned).toMatchObject([{ windows: [{ percent: usedPct }] }]);
+    },
+  );
+
   it("fetches Cursor usage and normalizes malformed billing dates to null", async () => {
     process.env["CURSOR_ACCESS_TOKEN"] = "cursor_test_token";
     fetchApi = mockFetch(
