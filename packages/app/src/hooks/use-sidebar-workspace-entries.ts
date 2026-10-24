@@ -2,6 +2,7 @@ import { useMemo, useRef } from "react";
 import { useStoreWithEqualityFn } from "zustand/traditional";
 import { useCreateFlowStore } from "@/stores/create-flow-store";
 import { useSessionStore } from "@/stores/session-store";
+import { useRelayWorkspaceIndicators } from "@/execution-relay/display";
 import {
   areSidebarWorkspaceSessionsEqual,
   buildSidebarWorkspaceEntries,
@@ -19,6 +20,7 @@ export function useSidebarWorkspaceEntries(
   placements: readonly SidebarWorkspacePlacement[],
   enabled = true,
 ): ReadonlyMap<string, SidebarWorkspaceEntry> {
+  const relayIndicators = useRelayWorkspaceIndicators(enabled);
   const serverIds = useMemo(
     () => Array.from(new Set(placements.map((placement) => placement.serverId))),
     [placements],
@@ -50,8 +52,9 @@ export function useSidebarWorkspaceEntries(
       sessions,
       pendingCreateAttempts,
       previousEntries: previousEntriesRef.current,
+      relayIndicators,
     });
     previousEntriesRef.current = entries;
     return entries;
-  }, [enabled, pendingCreateAttempts, placements, sessions]);
+  }, [enabled, pendingCreateAttempts, placements, sessions, relayIndicators]);
 }

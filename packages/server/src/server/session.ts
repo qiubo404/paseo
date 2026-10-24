@@ -1,3 +1,4 @@
+import type { ExecutionRelayService } from "./agent/execution-relay/service.js";
 import { type WorkspaceRuntimeStore } from "./workspace-runtime-store/index.js";
 import type { AgentMessageDelivery } from "./agent/agent-messages/index.js";
 import { AgentDirectory } from "./agent/directory.js";
@@ -438,6 +439,7 @@ const nodeSessionFileSystem: SessionFileSystem = {
 type AgentMcpTransportFactory = () => Promise<unknown>;
 
 export interface SessionOptions {
+  executionRelay?: ExecutionRelayService;
   connectedHosts?: ConnectedHosts;
   sourceId?: string;
   routed?: boolean;
@@ -819,10 +821,12 @@ export class Session {
   private readonly workspaceScripts: WorkspaceScriptsService;
   private readonly messageReceipts: Pick<MessageReceipts, "send">;
   private readonly agentMessages: AgentMessageDelivery;
+  private readonly executionRelay: ExecutionRelayService | undefined;
   private readonly createAgentLifecycleDispatch: CreateAgentLifecycleDispatch;
   private readonly creationService: Pick<CreationService, "create" | "subscribe">;
 
   constructor(options: SessionOptions) {
+    this.executionRelay = options.executionRelay;
     const {
       clientId,
       permissions,
@@ -2382,6 +2386,8 @@ export class Session {
     msg: SessionInboundMessage,
     source?: object,
   ): Promise<void> | undefined {
+    const relay = this.dispatchExecutionRelayMessage(msg);
+    if (relay) return relay;
     if (msg.type === "workspace.setup.subscribe.request") return this.subscribeWorkspaceSetup(msg);
     if (msg.type === "browser.host.register.request") return this.registerBrowserHost(msg);
     if (msg.type === "browser.automation.execute.response") {
@@ -2402,6 +2408,41 @@ export class Session {
       });
     }
     return undefined;
+  }
+
+  private dispatchExecutionRelayMessage(msg: SessionInboundMessage): Promise<void> | undefined {
+    if (
+      msg.type !== "execution.relay.get_state.request" &&
+      msg.type !== "execution.relay.join.request" &&
+      msg.type !== "execution.relay.update.request"
+    )
+      return undefined;
+    return this.handleExecutionRelayMessage(msg);
+  }
+
+  private async handleExecutionRelayMessage(
+    msg: Extract<SessionInboundMessage, { type: `execution.relay.${string}` }>,
+  ): Promise<void> {
+    let state = null;
+    let error: string | null = null;
+    try {
+      if (!this.executionRelay) throw new Error("Execution relay is unavailable on this host");
+      if (msg.type === "execution.relay.join.request")
+        await this.executionRelay.join(msg.source, msg.planRequestId, msg.target);
+      if (msg.type === "execution.relay.update.request")
+        await this.executionRelay.update(msg.member, msg.action);
+      state = await this.executionRelay.getState();
+    } catch (failure) {
+      error = getErrorMessage(failure);
+    }
+    let type:
+      | "execution.relay.get_state.response"
+      | "execution.relay.join.response"
+      | "execution.relay.update.response" = "execution.relay.update.response";
+    if (msg.type === "execution.relay.get_state.request")
+      type = "execution.relay.get_state.response";
+    if (msg.type === "execution.relay.join.request") type = "execution.relay.join.response";
+    this.emit({ type, payload: { requestId: msg.requestId, error, state } });
   }
 
   private async dispatchInboundMessage(msg: SessionInboundMessage, source?: object): Promise<void> {

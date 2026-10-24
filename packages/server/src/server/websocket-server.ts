@@ -1,3 +1,5 @@
+import { createExecutionRelayRuntime } from "./agent/execution-relay/runtime.js";
+import type { ExecutionRelayService } from "./agent/execution-relay/service.js";
 import { type WorkspaceRuntimeStore } from "./workspace-runtime-store/index.js";
 import {
   createAgentMessageDelivery,
@@ -560,6 +562,7 @@ export class VoiceAssistantWebSocketServer {
   private readonly agentStorage: AgentStorage;
   private readonly messageReceipts: MessageReceipts;
   readonly agentMessages: AgentMessageDelivery;
+  readonly executionRelay: ExecutionRelayService;
   private readonly creationService: CreationService;
   private readonly projectRegistry: ProjectRegistry;
   private readonly workspaceRegistry: WorkspaceRegistry;
@@ -754,6 +757,15 @@ export class VoiceAssistantWebSocketServer {
     this.downloadTokenStore = downloadTokenStore;
     this.paseoHome = paseoHome;
     this.connectedHosts = new ConnectedHosts(paseoHome, { serverId, label: getHostName() });
+    this.executionRelay = createExecutionRelayRuntime({
+      serverId,
+      paseoHome,
+      agentManager,
+      agentStorage,
+      workspaceRegistry: this.workspaceRegistry,
+      hosts: () => this.toolHosts(),
+      logger,
+    });
     this.passwordHash = auth?.password;
     this.worktreesRoot = daemonRuntimeConfig?.worktreesRoot;
     this.daemonConfigStore = daemonConfigStore;
@@ -1134,6 +1146,7 @@ export class VoiceAssistantWebSocketServer {
 
   public async close(): Promise<void> {
     this.prepareForShutdown();
+    await this.executionRelay.close();
     await this.agentMessages.close();
     await this.connectedHosts.close();
     this.unsubscribeSpeechReadiness?.();
@@ -1602,6 +1615,7 @@ export class VoiceAssistantWebSocketServer {
       agentStorage: this.agentStorage,
       messageReceipts: this.messageReceipts,
       agentMessages: this.agentMessages,
+      executionRelay: this.executionRelay,
       creationService: this.creationService,
       projectRegistry: this.projectRegistry,
       workspaceRegistry: this.workspaceRegistry,
@@ -1945,6 +1959,7 @@ export class VoiceAssistantWebSocketServer {
       ...(this.serverCapabilities ? { capabilities: this.serverCapabilities } : {}),
       features: {
         connectedHosts: true,
+        executionRelay: true,
         hostMultiplexing: true,
         // COMPAT(relayProtectedSecurity): added in v0.13.0, remove gate after 2027-04-21.
         relayProtectedSecurity: true,

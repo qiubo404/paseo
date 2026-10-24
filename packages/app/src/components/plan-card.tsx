@@ -81,7 +81,11 @@ function PlanCardContent({
           <MarkdownRenderer text={text} />
         </View>
       ) : null}
-      {footer ? <View style={styles.footer}>{footer}</View> : null}
+      {footer ? (
+        <View style={styles.footer} testID="plan-card-footer">
+          {footer}
+        </View>
+      ) : null}
     </View>
   );
 }

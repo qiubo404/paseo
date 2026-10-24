@@ -14,7 +14,10 @@ export function resolveSidebarWorkspacePrimaryLabel(input: {
 }
 
 export function resolveSidebarWorkspaceAccessibilityLabel(input: {
-  workspace: Pick<SidebarWorkspaceEntry, "name" | "currentBranch" | "statusBucket">;
+  workspace: Pick<
+    SidebarWorkspaceEntry,
+    "name" | "currentBranch" | "statusBucket" | "relayIndicator"
+  >;
   workspaceTitleSource: WorkspaceTitleSource;
   leadingProjectName?: string | null;
   hostBadgeLabel?: string | null;
@@ -22,15 +25,18 @@ export function resolveSidebarWorkspaceAccessibilityLabel(input: {
   serviceLabel?: string | null;
   t: TFunction;
 }): string {
+  let statusLabel: string | null = null;
+  if (input.workspace.relayIndicator)
+    statusLabel = input.t(`executionRelay.${input.workspace.relayIndicator}`);
+  else if (input.workspace.statusBucket !== "done")
+    statusLabel = getStatusBucketLabel(input.workspace.statusBucket, input.t);
   return [
     input.leadingProjectName,
     resolveSidebarWorkspacePrimaryLabel(input),
     input.hostBadgeLabel,
     input.pullRequestLabel,
     input.serviceLabel,
-    input.workspace.statusBucket === "done"
-      ? null
-      : getStatusBucketLabel(input.workspace.statusBucket, input.t),
+    statusLabel,
   ]
     .filter((label): label is string => Boolean(label))
     .join(", ");

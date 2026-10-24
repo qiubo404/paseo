@@ -14,6 +14,7 @@ import { aggregateSidebarStateBuckets } from "@/utils/sidebar-agent-state";
 import { shortenPath } from "@/utils/shorten-path";
 import type { WorkspaceAgentActivity } from "@/utils/workspace-agent-activity";
 import { resolveWorkspaceMapKeyByIdentity } from "@/utils/workspace-identity";
+import type { RelayWorkspaceIndicator } from "@/execution-relay/model";
 
 const EMPTY_PROJECTS: SidebarProjectEntry[] = [];
 
@@ -39,6 +40,7 @@ export interface SidebarStatusWorkspacePlacement extends SidebarWorkspacePlaceme
 }
 
 export interface SidebarWorkspaceEntry extends SidebarStatusWorkspacePlacement {
+  relayIndicator?: RelayWorkspaceIndicator;
   workspaceDirectory: string;
   workspaceDirectoryLabel: string;
   // Raw user-set title (null when the name is derived from branch/directory).
@@ -349,6 +351,7 @@ export function buildSidebarWorkspaceEntries(input: {
   sessions: SidebarWorkspaceSession[];
   pendingCreateAttempts?: Record<string, PendingCreateAttempt>;
   previousEntries?: ReadonlyMap<string, SidebarWorkspaceEntry>;
+  relayIndicators?: Readonly<Record<string, RelayWorkspaceIndicator>>;
 }): ReadonlyMap<string, SidebarWorkspaceEntry> {
   if (input.placements.length === 0 || input.sessions.length === 0) {
     return new Map();
@@ -377,6 +380,10 @@ export function buildSidebarWorkspaceEntries(input: {
       workspaceAgentActivity: session.workspaceAgentActivity,
     });
     const previousEntry = input.previousEntries?.get(placement.workspaceKey);
+    const relayIndicator =
+      input.relayIndicators?.[`${placement.serverId}:${placement.workspaceId}`];
+    if (relayIndicator && entry.statusBucket === "needs_input")
+      entry.relayIndicator = relayIndicator;
     const nextEntry =
       previousEntry && areSidebarWorkspaceEntriesEqual(previousEntry, entry)
         ? previousEntry

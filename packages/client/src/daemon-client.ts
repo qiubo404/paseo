@@ -1,3 +1,4 @@
+import type { RelayAddress, RelayState } from "@getpaseo/protocol/execution-relay";
 import {
   HOST_ROUTE_OPCODE,
   encodeHostRouteFrame,
@@ -5742,6 +5743,49 @@ export class DaemonClient {
   // ============================================================================
   // Permissions
   // ============================================================================
+
+  async getExecutionRelayState(): Promise<RelayState> {
+    const requestId = this.createRequestId();
+    const result = await this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "execution.relay.get_state.request", requestId },
+      responseType: "execution.relay.get_state.response",
+    });
+    if (result.error || !result.state)
+      throw new Error(result.error ?? "Execution relay is unavailable");
+    return result.state;
+  }
+
+  async joinExecutionRelay(
+    source: RelayAddress,
+    planRequestId: string,
+    target: RelayAddress,
+  ): Promise<RelayState> {
+    const requestId = this.createRequestId();
+    const result = await this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "execution.relay.join.request", requestId, source, planRequestId, target },
+      responseType: "execution.relay.join.response",
+    });
+    if (result.error || !result.state)
+      throw new Error(result.error ?? "Could not join execution relay");
+    return result.state;
+  }
+
+  async updateExecutionRelay(
+    member: RelayAddress,
+    action: "pause" | "resume" | "leave",
+  ): Promise<RelayState> {
+    const requestId = this.createRequestId();
+    const result = await this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "execution.relay.update.request", requestId, member, action },
+      responseType: "execution.relay.update.response",
+    });
+    if (result.error || !result.state)
+      throw new Error(result.error ?? "Could not update execution relay");
+    return result.state;
+  }
 
   async respondToPermission(
     agentId: string,

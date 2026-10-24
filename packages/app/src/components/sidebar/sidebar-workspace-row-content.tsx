@@ -31,6 +31,7 @@ import { resolveSidebarWorkspacePrimaryLabel } from "@/components/sidebar/sideba
 import { DensityIcon } from "@/components/ui/density-icon";
 import { TrailingActionScrim } from "@/components/ui/trailing-action-scrim";
 import { useWorkspaceLabelDefinitions } from "@/workspace-labels";
+import { RelayIndicator } from "@/execution-relay/indicator";
 
 const needsInputColorMapping = (theme: Theme) => ({
   color: theme.colors.surface0,
@@ -142,6 +143,7 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
             displayName={leadingProjectName}
             projectViewKey={workspace.projectViewKey}
             statusBucket={workspace.statusBucket}
+            relayIndicator={workspace.relayIndicator}
             backdrop={backdrop}
             loading={isLoading}
             testID={`sidebar-row-project-icon-${workspace.workspaceKey}`}
@@ -149,6 +151,7 @@ export const SidebarWorkspaceRowContent = memo(function SidebarWorkspaceRowConte
         ) : (
           <WorkspaceStatusIndicator
             bucket={workspace.statusBucket}
+            relayIndicator={workspace.relayIndicator}
             workspaceKind={workspace.workspaceKind}
             loading={isLoading}
             reserveIdleSpace={reserveIdleStatusIndicatorSpace}
@@ -184,11 +187,13 @@ function WorkspaceStatusIndicator({
   bucket,
   workspaceKind,
   loading = false,
+  relayIndicator,
   reserveIdleSpace = true,
 }: {
   bucket: SidebarWorkspaceEntry["statusBucket"];
   workspaceKind: SidebarWorkspaceEntry["workspaceKind"];
   loading?: boolean;
+  relayIndicator?: SidebarWorkspaceEntry["relayIndicator"];
   reserveIdleSpace?: boolean;
 }) {
   // Busy is the only status that moves, and it is the ring rather than a dot for the same
@@ -199,6 +204,14 @@ function WorkspaceStatusIndicator({
     return (
       <View style={styles.workspaceStatusDot} testID="workspace-status-indicator-loading">
         <StatusRing />
+      </View>
+    );
+  }
+
+  if (relayIndicator) {
+    return (
+      <View style={styles.workspaceStatusDot}>
+        <RelayIndicator kind={relayIndicator} />
       </View>
     );
   }

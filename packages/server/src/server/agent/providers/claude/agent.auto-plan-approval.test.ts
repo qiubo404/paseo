@@ -45,6 +45,22 @@ async function createPlanApproval(mode: PermissionMode) {
   return { session, request, resolution, sdkMode: () => sdkMode };
 }
 
+test("relay can explicitly upgrade an Always Ask plan to Bypass before releasing ExitPlanMode", async () => {
+  const plan = await createPlanApproval("default");
+  try {
+    await plan.session.setMode("bypassPermissions");
+    await plan.session.respondToPermission(plan.request.id, {
+      behavior: "allow",
+      selectedActionId: "implement_resume",
+    });
+    await expect(plan.resolution).resolves.toMatchObject({ behavior: "allow" });
+    expect(plan.sdkMode()).toBe("bypassPermissions");
+    expect(await plan.session.getCurrentMode()).toBe("bypassPermissions");
+  } finally {
+    await plan.session.close();
+  }
+});
+
 test.each([
   ["auto", "Implement with Auto mode"],
   ["bypassPermissions", "Implement with Bypass"],

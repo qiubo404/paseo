@@ -35,6 +35,20 @@ describe("resolveSidebarWorkspacePrimaryLabel", () => {
 });
 
 describe("resolveSidebarWorkspaceAccessibilityLabel", () => {
+  it("announces queued relay as waiting rather than asking for input", () => {
+    expect(
+      resolveSidebarWorkspaceAccessibilityLabel({
+        workspace: {
+          name: "Ready plan",
+          currentBranch: null,
+          statusBucket: "needs_input",
+          relayIndicator: "waiting",
+        },
+        workspaceTitleSource: "title",
+        t: i18n.t,
+      }),
+    ).toBe("Ready plan, Waiting for relay");
+  });
   it("includes the visible host badge with the workspace title", () => {
     const label = resolveSidebarWorkspaceAccessibilityLabel({
       workspace: { name: "Investigate search", currentBranch: "fix/search", statusBucket: "done" },

@@ -138,6 +138,17 @@ export default defineConfig({
     },
     // Bundle the CJS dependencies of the excluded gesture-handler package for the browser.
     include: [
+      "react",
+      "react-dom/client",
+      "react/jsx-dev-runtime",
+      "@testing-library/dom",
+      "zod",
+      "tweetnacl",
+      "base64-js",
+      "@noble/curves/ed25519.js",
+      "@noble/hashes/sha2.js",
+      "@noble/hashes/hmac.js",
+      "@noble/ciphers/chacha.js",
       "react/jsx-runtime",
       "react/compiler-runtime",
       "expo-router/react-navigation",
@@ -151,6 +162,8 @@ export default defineConfig({
       "react-native-gesture-handler > invariant",
     ],
     exclude: [
+      // Its WASM factory is supplied by Metro; keep mocked renderer boundaries unbundled.
+      "react-native-enriched-markdown",
       "react-native-reanimated",
       "react-native-gesture-handler",
       "react-native-keyboard-controller",

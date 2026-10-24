@@ -21,6 +21,8 @@ import {
 import { StatusRing } from "@/components/status-ring";
 import { getStatusRingOffset } from "@/components/status-ring/geometry";
 import type { SidebarSurfaceBackdrop } from "@/styles/surface-backdrop";
+import type { RelayWorkspaceIndicator } from "@/execution-relay/model";
+import { RelayIndicator } from "@/execution-relay/indicator";
 
 // Every surfaced status shares one badge shell, so the badge never changes size or position
 // between states. Only the thing inside it changes.
@@ -117,6 +119,7 @@ export function ProjectStatusIndicator({
   statusBucket,
   backdrop,
   loading = false,
+  relayIndicator,
   testID,
 }: {
   iconDataUri: string | null;
@@ -126,6 +129,7 @@ export function ProjectStatusIndicator({
   /** The row's current background, so the status badge can knock out of it. */
   backdrop: SidebarSurfaceBackdrop;
   loading?: boolean;
+  relayIndicator?: RelayWorkspaceIndicator;
   testID?: string;
 }) {
   const placeholderInitial = projectIconPlaceholderLabelFromDisplayName(displayName)
@@ -153,13 +157,18 @@ export function ProjectStatusIndicator({
           placeholderInitial={placeholderInitial}
           projectViewKey={projectViewKey}
         />
-        {badgeContent === null || badgeBucket === null ? null : (
+        {relayIndicator && !loading ? (
+          <View style={[styles.statusBadge, getStatusBadgeBackdropStyle(backdrop)]}>
+            <RelayIndicator kind={relayIndicator} />
+          </View>
+        ) : null}
+        {(!relayIndicator || loading) && badgeContent !== null && badgeBucket !== null ? (
           <ProjectStatusBadge
             content={badgeContent}
             statusBucket={badgeBucket}
             backdrop={backdrop}
           />
-        )}
+        ) : null}
       </View>
     </View>
   );

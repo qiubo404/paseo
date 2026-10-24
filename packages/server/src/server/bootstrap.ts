@@ -1825,6 +1825,7 @@ export async function createPaseoDaemon(
             await pluginRuntime.start();
             providerSnapshotManager.settlePluginProviders();
             await finishSubscriptions.start();
+            await wsServer.executionRelay.start();
             wsServer.beginAcceptingConnections();
             const relaySecurityLogger = logger.child({ module: "relay-security" });
             relayRuntime = createRelayRuntime({
@@ -1909,6 +1910,7 @@ export async function createPaseoDaemon(
     scriptHealthMonitor.stop();
     // Freeze both ingress and registration before taking the agent closure snapshot.
     wsServer?.prepareForShutdown();
+    await wsServer?.executionRelay.close();
     await finishSubscriptions.close();
     await wsServer?.agentMessages.close();
     agentManager.prepareForShutdown();

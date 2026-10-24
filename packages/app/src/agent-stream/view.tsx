@@ -1,3 +1,6 @@
+import { navigateToAgent } from "@/utils/navigate-to-agent";
+import { RelayPlanActions, RelayStatus } from "@/execution-relay/controls";
+import { useHasExecutionRelay, useIsRelayPlanManaged } from "@/execution-relay/query";
 import { ChatFind, ChatFindExpansion } from "@/agent-stream/chat-find";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import React, {
@@ -133,6 +136,7 @@ function BottomOverlayInset({ height }: { height: number }) {
 }
 
 function renderPendingPermissionsNode(input: {
+  serverId: string;
   pendingPermissions: PendingPermission[];
   client: DaemonClient | null;
 }): ReactNode {
@@ -142,7 +146,12 @@ function renderPendingPermissionsNode(input: {
   return (
     <View style={stylesheet.permissionsContainer}>
       {input.pendingPermissions.map((permission) => (
-        <PermissionRequestCard key={permission.key} permission={permission} client={input.client} />
+        <PermissionRequestCard
+          key={permission.key}
+          permission={permission}
+          client={input.client}
+          serverId={input.serverId}
+        />
       ))}
     </View>
   );
@@ -363,6 +372,7 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
     const transformTimelineItem = useInstalledTimelineTransform(resolvedServerId);
 
     const client = useSessionStore((state) => state.sessions[resolvedServerId]?.client ?? null);
+    const hasRelay = useHasExecutionRelay({ serverId: resolvedServerId, agentId });
     const sessionStreamHead = useSessionStore((state) =>
       state.sessions[resolvedServerId]?.agentStreamHead?.get(agentId),
     );
@@ -913,14 +923,24 @@ const AgentStreamViewComponent = forwardRef<AgentStreamViewHandle, AgentStreamVi
       [pendingPermissions, agentId],
     );
 
-    const pendingPermissionsNode = useMemo(
-      () =>
-        renderPendingPermissionsNode({
-          pendingPermissions: pendingPermissionItems,
-          client,
-        }),
-      [client, pendingPermissionItems],
-    );
+    const pendingPermissionsNode = useMemo(() => {
+      const pending = renderPendingPermissionsNode({
+        pendingPermissions: pendingPermissionItems,
+        client,
+        serverId: resolvedServerId,
+      });
+      if (!hasRelay) return pending;
+      return (
+        <>
+          {pending}
+          <RelayStatus
+            serverId={resolvedServerId}
+            agentId={agentId}
+            onOpenAgent={navigateToAgent}
+          />
+        </>
+      );
+    }, [client, pendingPermissionItems, resolvedServerId, agentId, hasRelay]);
     const turnFooterNode = useMemo(
       () =>
         isTurnActive || bottomTurnFooterHost ? (
@@ -1387,9 +1407,11 @@ function PermissionActionButton({
 function PermissionRequestCard({
   permission,
   client,
+  serverId,
 }: {
   permission: PendingPermission;
   client: DaemonClient | null;
+  serverId: string;
 }) {
   const { t } = useTranslation();
   const isMobile = useIsCompactFormFactor();
@@ -1519,6 +1541,61 @@ function PermissionRequestCard({
     [isMobile],
   );
 
+  const footer = useMemo(
+    () => (
+      <>
+        <Text testID="permission-request-question" style={permissionStyles.question}>
+          {t("agentStream.permission.question")}
+        </Text>
+
+        <View style={optionsContainerStyle}>
+          {resolvedActions.map((action) => {
+            const isPrimary = action.variant === "primary";
+            const isRespondingAction = respondingActionId === action.id;
+            const Icon = action.behavior === "allow" ? ThemedCheckIcon : ThemedXIcon;
+            let testID: string;
+            if (action.behavior === "deny") testID = "permission-request-deny";
+            else if (action.id === "accept" || action.id === "implement")
+              testID = "permission-request-accept";
+            else testID = `permission-request-action-${action.id}`;
+
+            return (
+              <PermissionActionButton
+                key={action.id}
+                action={action}
+                isRespondingAction={isRespondingAction}
+                isResponding={isResponding}
+                isPrimary={isPrimary}
+                Icon={Icon}
+                testID={testID}
+                onPress={handleActionPress}
+              />
+            );
+          })}
+        </View>
+      </>
+    ),
+    [
+      t,
+      optionsContainerStyle,
+      resolvedActions,
+      respondingActionId,
+      isResponding,
+      handleActionPress,
+    ],
+  );
+
+  const relayManaged = useIsRelayPlanManaged({ serverId, agentId: permission.agentId }, request.id);
+  const planFooter = useMemo(() => {
+    if (relayManaged) return null;
+    return request.provider === "claude" || request.provider === "codex" ? (
+      <RelayPlanActions serverId={serverId} agentId={permission.agentId} requestId={request.id}>
+        {footer}
+      </RelayPlanActions>
+    ) : (
+      footer
+    );
+  }, [relayManaged, request.provider, serverId, permission.agentId, request.id, footer]);
   if (request.kind === "question") {
     const responseFailed =
       permissionMutation.isError &&
@@ -1535,40 +1612,6 @@ function PermissionRequestCard({
     );
   }
 
-  const footer = (
-    <>
-      <Text testID="permission-request-question" style={permissionStyles.question}>
-        {t("agentStream.permission.question")}
-      </Text>
-
-      <View style={optionsContainerStyle}>
-        {resolvedActions.map((action) => {
-          const isPrimary = action.variant === "primary";
-          const isRespondingAction = respondingActionId === action.id;
-          const Icon = action.behavior === "allow" ? ThemedCheckIcon : ThemedXIcon;
-          let testID: string;
-          if (action.behavior === "deny") testID = "permission-request-deny";
-          else if (action.id === "accept" || action.id === "implement")
-            testID = "permission-request-accept";
-          else testID = `permission-request-action-${action.id}`;
-
-          return (
-            <PermissionActionButton
-              key={action.id}
-              action={action}
-              isRespondingAction={isRespondingAction}
-              isResponding={isResponding}
-              isPrimary={isPrimary}
-              Icon={Icon}
-              testID={testID}
-              onPress={handleActionPress}
-            />
-          );
-        })}
-      </View>
-    </>
-  );
-
   if (isPlanRequest && planMarkdown) {
     return (
       <PlanCard
@@ -1576,7 +1619,7 @@ function PermissionRequestCard({
         description={description}
         text={planMarkdown}
         outcome="pending"
-        footer={footer}
+        footer={planFooter}
         testID="permission-plan-card"
         disableOuterSpacing
       />

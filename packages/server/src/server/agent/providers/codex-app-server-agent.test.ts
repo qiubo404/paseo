@@ -6630,6 +6630,30 @@ describe("Codex app-server provider", () => {
     });
   });
 
+  test("relay approval switches a ready Codex plan to Full Access without leaving plan mode enabled", async () => {
+    const session = createSession({ featureValues: { plan_mode: true } });
+    const events: AgentStreamEvent[] = [];
+    session.subscribe((event) => events.push(event));
+    asInternals(session).handleNotification("turn/started", { turn: { id: "relay-plan" } });
+    asInternals(session).handleNotification("turn/plan/updated", {
+      plan: [{ step: "Implement relay", status: "pending" }],
+    });
+    asInternals(session).handleNotification("turn/completed", {
+      turn: { status: "completed", error: null },
+    });
+    const request = session.getPendingPermissions().find((entry) => entry.kind === "plan");
+    if (!request) throw new Error("Expected a plan approval");
+    await session.setMode("full-access");
+    const result = await session.respondToPermission(request.id, {
+      behavior: "allow",
+      selectedActionId: "implement",
+    });
+    expect(await session.getCurrentMode()).toBe("full-access");
+    expect(asInternals(session).planModeEnabled).toBe(false);
+    expect(result?.followUpPrompt).toContain("Implement relay");
+    expect(session.getPendingPermissions()).toEqual([]);
+  });
+
   test("approving a synthetic Codex plan permission keeps fast mode disabled when it started disabled", async () => {
     const session = createSession({
       featureValues: { plan_mode: true, fast_mode: false },
