@@ -119,7 +119,19 @@ export function formatResetLabel(
   if (!rel) return null;
   if (rel.unit === "now" && retained) return t("providerUsage.timing.resetTimePassed");
   if (rel.unit === "now") return t("providerUsage.timing.resettingNow");
-  const duration = formatResetCountdown(iso, now);
+  const minutes = Math.floor((Date.parse(iso) - now) / 60_000);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+  const dayLabel = formatRelativeDuration({ unit: "days", count: days }, t);
+  const hourLabel = formatRelativeDuration({ unit: "hours", count: hours % 24 }, t);
+  const minuteLabel = formatRelativeDuration({ unit: "minutes", count: minutes % 60 }, t);
+  const separator = /^(zh|ja|ko)(-|$)/.test(i18n.resolvedLanguage ?? "") ? "" : " ";
+  let duration: string | null;
+  if (days > 0) duration = [dayLabel, hourLabel].join(separator);
+  else if (hours > 0) duration = [hourLabel, minuteLabel].join(separator);
+  else
+    duration =
+      minutes > 0 ? minuteLabel : `<${formatRelativeDuration({ unit: "minutes", count: 1 }, t)}`;
   return duration ? t("providerUsage.timing.resetsIn", { duration }) : null;
 }
 

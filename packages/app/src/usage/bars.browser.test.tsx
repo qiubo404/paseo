@@ -46,9 +46,9 @@ it("shows reset minutes in the mounted bar and updates them each minute", async 
       />,
     ),
   );
-  expect(container.textContent).toContain("将在 2h 15m后重置");
+  expect(container.textContent).toContain("将在 2小时15分钟后重置");
   act(() => vi.advanceTimersByTime(60_000));
-  expect(container.textContent).toContain("将在 2h 14m后重置");
+  expect(container.textContent).toContain("将在 2小时14分钟后重置");
 });
 
 it("translates mounted usage rows when the language changes", async () => {
