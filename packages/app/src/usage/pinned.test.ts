@@ -113,12 +113,15 @@ describe("resolvePinnedUsage", () => {
         label: "Claude Session 67% used · resets in 2h 15m",
       },
       {
-        shortLabel: "3d 8h",
+        shortLabel: "3d 8h 0m",
         percentText: "21%",
-        label: "Claude Weekly 21% used · resets in 3d 8h",
+        label: "Claude Weekly 21% used · resets in 3d 8h 0m",
       },
     ]);
-    expect(summary(now + 60_000).map((window) => window.shortLabel)).toEqual(["2h 14m", "3d 7h"]);
+    expect(summary(now + 60_000).map((window) => window.shortLabel)).toEqual([
+      "2h 14m",
+      "3d 7h 59m",
+    ]);
     expect(summary(now, "remaining").map((window) => window.percentText)).toEqual(["33%", "79%"]);
     expect(summary(now + 135 * 60_000)[0]!.label).toBe("Claude Session 67% used · Pending reset");
   });

@@ -9,7 +9,66 @@ export function enabledHostUsageReports(
   reports: readonly UsageReportEntry[],
   providers: Readonly<Record<string, { enabled?: boolean }>>,
 ): UsageReportEntry[] {
-  return reports.filter((report) => providers[report.sourceId]?.enabled !== false);
+  const visible: UsageReportEntry[] = [];
+  for (const entry of reports) {
+    if (providers[entry.sourceId]?.enabled === false) continue;
+    const quota = claudeQuota(entry);
+    const duplicate = visible.findIndex((candidate) => {
+      const conflictingLabels =
+        candidate.account.label &&
+        entry.account.label &&
+        candidate.account.label !== entry.account.label;
+      if (!quota || conflictingLabels) return false;
+      const other = claudeQuota(candidate);
+      if (!other || other.key !== quota.key) return false;
+      return quota.resetsAt.every((reset, index) => {
+        const otherReset = other.resetsAt[index];
+        if (reset === null || otherReset === null) return reset === otherReset;
+        return otherReset !== undefined && Math.abs(reset - otherReset) <= 1000;
+      });
+    });
+    if (duplicate === -1) {
+      visible.push(entry);
+      continue;
+    }
+    const previous = visible[duplicate]!;
+    if (!previous.account.label && entry.account.label) visible[duplicate] = entry;
+    else if (Boolean(previous.account.label) === Boolean(entry.account.label))
+      visible[duplicate] = laterFetched(previous, entry);
+  }
+  return visible;
+}
+
+interface ClaudeQuota {
+  key: string;
+  resetsAt: (number | null)[];
+}
+
+function claudeQuota(entry: UsageReportEntry): ClaudeQuota | null {
+  if (entry.sourceId !== "claude" || entry.report.status !== "available") return null;
+  const { report } = entry;
+  // An empty or partially loaded report cannot establish that two logins share a quota.
+  for (const id of ["five_hour", "weekly"]) {
+    const window = report.windows.find((candidate) => candidate.id === id);
+    if (!window || usedPercent(window) === null || !window.resetsAt) return null;
+    if (!Number.isFinite(Date.parse(window.resetsAt))) return null;
+  }
+  const windows = [...report.windows].sort((a, b) => a.id.localeCompare(b.id));
+  // Separate reads of the same Claude quota can differ by sub-second reset timestamps.
+  return {
+    key: JSON.stringify([
+      report.planLabel,
+      windows.map((window) => [
+        window.id,
+        usedPercent(window),
+        window.runsOutAt,
+        window.shortfallPct,
+      ]),
+      report.balances ?? [],
+      report.details ?? [],
+    ]),
+    resetsAt: windows.map((window) => (window.resetsAt ? Date.parse(window.resetsAt) : null)),
+  };
 }
 
 export function usedPercent(window: UsageWindow): number | null {

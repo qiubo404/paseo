@@ -142,6 +142,85 @@ async function refreshUsageAndWaitForReports(page: Page, usage: UsageReportsFixt
 }
 
 test.describe("usage modal", () => {
+  test("merges identical Claude quotas and separates them again when a refresh differs", async ({
+    page,
+  }) => {
+    const now = Date.now();
+    const anonymous: UsageReportEntry = {
+      id: "claude:temporary",
+      sourceId: "claude",
+      sourceLabel: "Claude",
+      account: {},
+      fetchedAt: new Date(now).toISOString(),
+      report: {
+        status: "available",
+        planLabel: "Pro",
+        windows: [
+          {
+            id: "five_hour",
+            label: "Session",
+            usedPct: 97,
+            resetsAt: new Date(now + 135 * 60_000).toISOString(),
+          },
+          {
+            id: "weekly",
+            label: "Weekly",
+            usedPct: 27,
+            resetsAt: new Date(now + 2 * 86400_000).toISOString(),
+          },
+        ],
+      },
+    };
+    const labeled: UsageReportEntry = {
+      ...anonymous,
+      id: "claude:account.org",
+      account: { label: "owner@example.test" },
+    };
+    const usage = await installUsageReportsFixture(page, {
+      lists: [
+        (request) => {
+          if (!request.forceRefresh) return [anonymous, labeled];
+          return [
+            {
+              ...anonymous,
+              report: {
+                status: "available",
+                planLabel: "Pro",
+                windows: [
+                  {
+                    id: "five_hour",
+                    label: "Session",
+                    usedPct: 50,
+                    resetsAt: new Date(now + 135 * 60_000).toISOString(),
+                  },
+                  {
+                    id: "weekly",
+                    label: "Weekly",
+                    usedPct: 27,
+                    resetsAt: new Date(now + 2 * 86400_000).toISOString(),
+                  },
+                ],
+              },
+            },
+            labeled,
+          ];
+        },
+      ],
+    });
+    await gotoAppShell(page);
+    await openUsageFromItem(page);
+    const group = page.getByTestId(`usage-host-${getServerId()}`);
+    const cards = group.locator('[data-testid^="usage-report-claude:"]');
+    await expect(cards).toHaveCount(1);
+    await expect(cards.getByText("owner@example.test")).toBeVisible();
+    await expect(cards).toContainText(/resets 2h \d+m/);
+    await qaScreenshot(page, "claude-deduplicated-minute-reset");
+    await refreshAllUsage(page);
+    await expect(cards).toHaveCount(2);
+    await expect(group.getByTestId("usage-report-claude:temporary")).toContainText("50% used");
+    expect(usage.listRequests().some((request) => request.forceRefresh)).toBe(true);
+  });
+
   test("sidebar follows the focused chat and its refresh action stays outside the all-host modal", async ({
     page,
   }) => {

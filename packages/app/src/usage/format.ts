@@ -51,7 +51,7 @@ export function formatDisplayPct(
     : t("providerUsage.values.remaining", { amount: percentage });
 }
 
-/** Sidebar reset countdown; a passed timestamp cannot tell us when the next cycle starts. */
+/** Shared reset countdown; a passed timestamp cannot tell us when the next cycle starts. */
 export function formatResetCountdown(
   iso: string | null | undefined,
   now: number = Date.now(),
@@ -63,7 +63,7 @@ export function formatResetCountdown(
   const minutes = Math.floor(remainingMs / 60_000);
   const hours = Math.floor(minutes / 60);
   const days = Math.floor(hours / 24);
-  if (days > 0) return `${days}d ${hours % 24}h`;
+  if (days > 0) return `${days}d ${hours % 24}h ${minutes % 60}m`;
   if (hours > 0) return `${hours}h ${minutes % 60}m`;
   return minutes > 0 ? `${minutes}m` : "<1m";
 }
@@ -119,7 +119,7 @@ export function formatResetLabel(
   if (!rel) return null;
   if (rel.unit === "now" && retained) return t("providerUsage.timing.resetTimePassed");
   if (rel.unit === "now") return t("providerUsage.timing.resettingNow");
-  const duration = formatRelativeDuration(rel, t);
+  const duration = formatResetCountdown(iso, now);
   return duration ? t("providerUsage.timing.resetsIn", { duration }) : null;
 }
 

@@ -172,6 +172,80 @@ describe("sidebar usage refresh scheduling", () => {
 });
 
 describe("enabledHostUsageReports", () => {
+  it("collapses identical Claude session and weekly quotas, preferring the labeled account", () => {
+    const anonymous = claudeEntry("temporary");
+    const labeled = { ...claudeEntry("account.org"), account: { label: "owner@example.test" } };
+    const codex = entry({ sourceId: "codex" });
+    expect(enabledHostUsageReports([anonymous, codex, labeled], {})).toEqual([labeled, codex]);
+    expect(enabledHostUsageReports([labeled, anonymous], {})).toEqual([labeled]);
+    expect(anonymous.account).toEqual({});
+  });
+
+  it.each(["five_hour", "weekly"])("keeps different %s percentages and reset timestamps", (id) => {
+    const original = claudeEntry("one");
+    for (const change of [{ usedPct: 50 }, { resetsAt: "2026-10-29T16:00:00Z" }]) {
+      const different = claudeEntry("two");
+      if (different.report.status !== "available") throw new Error("Expected available usage");
+      different.report.windows = different.report.windows.map((window) =>
+        window.id === id ? { ...window, ...change } : window,
+      );
+      expect(enabledHostUsageReports([original, different], {})).toEqual([original, different]);
+    }
+  });
+
+  it("preserves conflicting account labels even when quotas match", () => {
+    const first = { ...claudeEntry("one"), account: { label: "first@example.test" } };
+    const second = { ...claudeEntry("two"), account: { label: "second@example.test" } };
+    expect(enabledHostUsageReports([first, second], {})).toEqual([first, second]);
+  });
+
+  it("merges sub-second reset drift across a minute boundary but preserves different reset times", () => {
+    const labeled = { ...claudeEntry("account.org"), account: { label: "owner@example.test" } };
+    const anonymous = claudeEntry("temporary");
+    if (labeled.report.status !== "available" || anonymous.report.status !== "available")
+      throw new Error("Expected available usage");
+    labeled.report.windows = labeled.report.windows.map((window) => ({
+      ...window,
+      resetsAt: "2026-10-26T14:49:59.947796+00:00",
+    }));
+    anonymous.report.windows = anonymous.report.windows.map((window) => ({
+      ...window,
+      resetsAt: "2026-10-26T14:50:00.297445+00:00",
+    }));
+    expect(enabledHostUsageReports([labeled, anonymous], {})).toEqual([labeled]);
+    anonymous.report.windows[0]!.resetsAt = "2026-10-26T14:50:01.947796+00:00";
+    expect(enabledHostUsageReports([labeled, anonymous], {})).toEqual([labeled, anonymous]);
+  });
+
+  it("keeps incomplete, failed, and differently scoped quotas visible", () => {
+    const original = claudeEntry("one");
+    const incomplete = claudeEntry("incomplete");
+    if (incomplete.report.status !== "available") throw new Error("Expected available usage");
+    incomplete.report.windows = [{ id: "weekly", label: "Weekly", usedPct: 27 }];
+    const scoped = claudeEntry("scoped");
+    if (scoped.report.status !== "available") throw new Error("Expected available usage");
+    scoped.report.windows.push({ id: "weekly_model", label: "Weekly model", usedPct: 10 });
+    const failed: UsageReportEntry = {
+      ...claudeEntry("failed"),
+      report: { status: "error", error: "Unavailable" },
+    };
+    const reports = [original, incomplete, scoped, failed];
+    expect(enabledHostUsageReports(reports, {})).toEqual(reports);
+  });
+
+  it("retains the newer copy and keeps hosts and other sources independent", () => {
+    const older = claudeEntry("old");
+    const newer = { ...claudeEntry("new"), fetchedAt: "2026-10-26T12:00:00Z" };
+    expect(enabledHostUsageReports([older, newer], {})).toEqual([newer]);
+    expect(enabledHostUsageReports([older], {})).toEqual([older]);
+    expect(enabledHostUsageReports([newer], {})).toEqual([newer]);
+    const codex = [
+      { ...older, sourceId: "codex", id: "codex:one" },
+      { ...newer, sourceId: "codex", id: "codex:two" },
+    ];
+    expect(enabledHostUsageReports(codex, {})).toEqual(codex);
+  });
+
   it("hides explicitly disabled providers while preserving enabled and standalone sources", () => {
     const cursor = entry({ sourceId: "cursor" });
     const codex = entry({ sourceId: "codex" });
@@ -193,6 +267,20 @@ describe("enabledHostUsageReports", () => {
     expect(reports).toHaveLength(1);
   });
 });
+
+function claudeEntry(account: string): UsageReportEntry {
+  return {
+    ...entry({
+      sourceId: "claude",
+      planLabel: "Pro",
+      windows: [
+        { id: "five_hour", label: "Session", usedPct: 97, resetsAt: "2026-10-26T16:00:00Z" },
+        { id: "weekly", label: "Weekly", usedPct: 27, resetsAt: "2026-10-28T16:00:00Z" },
+      ],
+    }),
+    id: `claude:${account}`,
+  };
+}
 
 function entry(input: {
   windows?: UsageWindow[];

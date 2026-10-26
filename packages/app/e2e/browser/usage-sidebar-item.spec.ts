@@ -43,7 +43,7 @@ import { openAgentRoute, seedMockAgentWorkspace } from "../support/helpers/mock-
 const USAGE_NOW = new Date("2026-10-21T08:00:00.000Z");
 
 test.beforeEach(async ({ page }) => {
-  await page.clock.setSystemTime(USAGE_NOW);
+  await page.clock.setFixedTime(USAGE_NOW);
 });
 
 const WIDE = { width: 1440, height: 900 };
@@ -99,10 +99,10 @@ test.describe("Usage item", () => {
       await seedSidebarFooterPreferences(page, [{ key: "usage", visible: true }]);
       await page.setViewportSize(WIDE);
       await openAgentRoute(page, agent);
-      await expectPinnedUsage(page, ["67% 2h 15m", "21% 3d 8h"]);
+      await expectPinnedUsage(page, ["67% 2h 15m", "21% 3d 8h 0m"]);
       await expect(usageItem(page)).toHaveAttribute(
         "aria-label",
-        /Claude.*Session 67% used · resets in 2h 15m.*Weekly 21% used · resets in 3d 8h/,
+        /Claude.*Session 67% used · resets in 2h 15m.*Weekly 21% used · resets in 3d 8h 0m/,
       );
       await qaScreenshot(page, "reset-countdown-desktop", { kind: "footer" });
       await expect(usageItem(page).getByTestId("sidebar-usage-meter")).toHaveCount(2);
@@ -110,7 +110,7 @@ test.describe("Usage item", () => {
       const requests = usage.listRequests().length;
       await page.clock.setFixedTime(new Date(USAGE_NOW.getTime() + 60_000));
       await page.clock.fastForward(60_000);
-      await expectPinnedUsage(page, ["67% 2h 14m", "21% 3d 7h"]);
+      await expectPinnedUsage(page, ["67% 2h 14m", "21% 3d 7h 59m"]);
       expect(usage.listRequests()).toHaveLength(requests);
 
       // A visibility transition uses the same signal on browser web and native AppState.
@@ -120,7 +120,7 @@ test.describe("Usage item", () => {
       });
       await page.clock.setFixedTime(new Date(USAGE_NOW.getTime() + 120_000));
       await page.clock.fastForward(60_000);
-      await expectPinnedUsage(page, ["67% 2h 14m", "21% 3d 7h"]);
+      await expectPinnedUsage(page, ["67% 2h 14m", "21% 3d 7h 59m"]);
       await page.evaluate(() => {
         Object.defineProperty(document, "visibilityState", {
           configurable: true,
@@ -128,12 +128,12 @@ test.describe("Usage item", () => {
         });
         document.dispatchEvent(new Event("visibilitychange"));
       });
-      await expectPinnedUsage(page, ["67% 2h 13m", "21% 3d 7h"]);
+      await expectPinnedUsage(page, ["67% 2h 13m", "21% 3d 7h 58m"]);
       expect(usage.listRequests()).toHaveLength(requests);
 
       await page.locator('[data-testid="sidebar-usage-refresh"]:visible').click();
       await expect.poll(() => usage.listRequests().at(-1)?.forceRefresh).toBe(true);
-      await expectPinnedUsage(page, ["67% 2h 13m", "21% 3d 7h"]);
+      await expectPinnedUsage(page, ["67% 2h 13m", "21% 3d 7h 58m"]);
 
       const handle = page
         .getByTestId("left-sidebar-resize-handle")
@@ -146,12 +146,12 @@ test.describe("Usage item", () => {
       await page.mouse.move(200, handleBounds.y + 150, { steps: 12 });
       await page.mouse.up();
       await expect(usageItem(page).getByTestId("sidebar-usage-meter")).toHaveCount(0);
-      await expectPinnedUsage(page, ["67% 2h 13m", "21% 3d 7h"]);
+      await expectPinnedUsage(page, ["67% 2h 13m", "21% 3d 7h 58m"]);
       await qaScreenshot(page, "reset-countdown-narrow", { kind: "footer" });
 
       await page.setViewportSize(COMPACT);
       await openCompactSidebar(page);
-      await expectPinnedUsage(page, ["67% 2h 13m", "21% 3d 7h"]);
+      await expectPinnedUsage(page, ["67% 2h 13m", "21% 3d 7h 58m"]);
       await expectPinnedUsageFits(page);
       await qaScreenshot(page, "reset-countdown-compact", { kind: "footer" });
       await openUsageFromItem(page);
@@ -178,7 +178,12 @@ test.describe("Usage item", () => {
       await expect(page).toHaveURL(startingUrl);
       await qaScreenshot(page, "compact-usage-icon-sheet");
       await setSummaryInSidebar(page, true);
-      await expectPinnedUsage(page, ["31% 1d 0h", "54% 1d 0h", "7% 1d 0h", "12% 1d 0h"]);
+      await expectPinnedUsage(page, [
+        "31% 1d 0h 30m",
+        "54% 1d 0h 30m",
+        "7% 1d 0h 30m",
+        "12% 1d 0h 30m",
+      ]);
       await closeUsageFromBackdrop(page);
     });
 
@@ -291,11 +296,21 @@ test.describe("Usage item", () => {
       await qaScreenshot(page, "compact-settings-sidebar-footer");
       await gotoAppShell(page);
       await openCompactSidebar(page);
-      await expectPinnedUsage(page, ["31% 1d 0h", "54% 1d 0h", "7% 1d 0h", "12% 1d 0h"]);
+      await expectPinnedUsage(page, [
+        "31% 1d 0h 30m",
+        "54% 1d 0h 30m",
+        "7% 1d 0h 30m",
+        "12% 1d 0h 30m",
+      ]);
       await qaScreenshot(page, "compact-footer-defaults");
       await page.setViewportSize(WIDE);
       await gotoAppShell(page);
-      await expectPinnedUsage(page, ["31% 1d 0h", "54% 1d 0h", "7% 1d 0h", "12% 1d 0h"]);
+      await expectPinnedUsage(page, [
+        "31% 1d 0h 30m",
+        "54% 1d 0h 30m",
+        "7% 1d 0h 30m",
+        "12% 1d 0h 30m",
+      ]);
       await qaScreenshot(page, "desktop-footer-defaults", { kind: "footer" });
       await openUsageFromItem(page);
       await qaScreenshot(page, "default-pins-card");
@@ -312,13 +327,13 @@ test.describe("Usage item", () => {
         0,
       );
       await togglePin(screen, "Claude", "Weekly");
-      await expectPinnedUsage(page, ["31% 1d 0h", "7% 1d 0h", "12% 1d 0h"]);
+      await expectPinnedUsage(page, ["31% 1d 0h 30m", "7% 1d 0h 30m", "12% 1d 0h 30m"]);
       await expect(pinRow(screen, "Claude", "Session")).toBeChecked();
       await expect(pinRow(screen, "Codex", "Session")).toBeChecked();
       await expect(pinRow(screen, "Codex", "Weekly")).toBeChecked();
       await qaScreenshot(page, "default-pins-after-one-toggle");
       await togglePin(screen, "Codex", "Session");
-      await expectPinnedUsage(page, ["31% 1d 0h", "12% 1d 0h"]);
+      await expectPinnedUsage(page, ["31% 1d 0h 30m", "12% 1d 0h 30m"]);
       await expect(usageItem(page)).not.toHaveText("Usage");
       await qaScreenshot(page, "desktop-footer-pins", { kind: "footer" });
       await expect(page.getByRole("button", { name: "Refresh all", exact: true })).toBeVisible();
@@ -330,9 +345,9 @@ test.describe("Usage item", () => {
 
     await test.step("remaining flips the Usage item and the Usage modal", async () => {
       await showUsageAs(page, "remaining");
-      await expectPinnedUsage(page, ["69% 1d 0h", "88% 1d 0h"]);
+      await expectPinnedUsage(page, ["69% 1d 0h 30m", "88% 1d 0h 30m"]);
       await expect(usageItem(page)).toHaveAccessibleName(
-        /Claude .*69% left · resets in 1d 0h, Codex .*88% left · resets in 1d 0h/,
+        /Claude .*69% left · resets in 1d 0h 30m, Codex .*88% left · resets in 1d 0h 30m/,
       );
       await expect(
         screen.getByTestId("usage-report-claude:default").getByText("69% left"),
@@ -347,7 +362,7 @@ test.describe("Usage item", () => {
       await page.setViewportSize(COMPACT);
       await openCompactSidebar(page);
       await expect(usageItem(page)).toBeInViewport();
-      await expectPinnedUsage(page, ["69% 1d 0h", "88% 1d 0h"]);
+      await expectPinnedUsage(page, ["69% 1d 0h 30m", "88% 1d 0h 30m"]);
       await qaScreenshot(page, "compact-footer");
       await openUsageFromItem(page);
       const sheet = usageModal(page);
@@ -383,7 +398,7 @@ test.describe("Usage item", () => {
 
     await test.step("a reload keeps the pins and the toggle", async () => {
       await page.reload();
-      await expectPinnedUsage(page, ["69% 1d 0h", "88% 1d 0h"]);
+      await expectPinnedUsage(page, ["69% 1d 0h 30m", "88% 1d 0h 30m"]);
       await openUsageFromItem(page);
       await openUsageOptions(page);
       await expect(page.getByTestId("usage-display-remaining")).toHaveAttribute(
@@ -491,10 +506,15 @@ test("the Usage Settings switch turns on the sidebar summary and the pins with i
 
   await test.step("on: the Usage item and the pins appear", async () => {
     await setSummaryInSidebar(page, true);
-    await expectPinnedUsage(page, ["31% 1d 0h", "54% 1d 0h", "7% 1d 0h", "12% 1d 0h"]);
+    await expectPinnedUsage(page, [
+      "31% 1d 0h 30m",
+      "54% 1d 0h 30m",
+      "7% 1d 0h 30m",
+      "12% 1d 0h 30m",
+    ]);
     await expect(pinRow(screen, "Claude", "Weekly")).toBeChecked();
     await togglePin(screen, "Claude", "Weekly");
-    await expectPinnedUsage(page, ["31% 1d 0h", "7% 1d 0h", "12% 1d 0h"]);
+    await expectPinnedUsage(page, ["31% 1d 0h 30m", "7% 1d 0h 30m", "12% 1d 0h 30m"]);
     await qaScreenshot(page, "usage-summary-on");
   });
 
@@ -508,7 +528,7 @@ test("the Usage Settings switch turns on the sidebar summary and the pins with i
     await expect(claude.getByText("Session", { exact: true })).toBeVisible({ timeout: 10_000 });
     await expectUnpinnableRows(claude);
     await setSummaryInSidebar(page, true);
-    await expectPinnedUsage(page, ["31% 1d 0h", "7% 1d 0h", "12% 1d 0h"]);
+    await expectPinnedUsage(page, ["31% 1d 0h 30m", "7% 1d 0h 30m", "12% 1d 0h 30m"]);
     await expect(pinRow(screen, "Claude", "Session")).toBeChecked();
     await expect(pinRow(screen, "Claude", "Weekly")).not.toBeChecked();
   });
@@ -522,7 +542,12 @@ test("released hosts supply source logos through the client conversion", async (
   await seedSidebarFooterPreferences(page, [{ key: "usage", visible: true }]);
   await page.setViewportSize(WIDE);
   await gotoAppShell(page);
-  await expectPinnedUsage(page, ["31% 1d 0h", "54% 1d 0h", "7% 1d 0h", "12% 1d 0h"]);
+  await expectPinnedUsage(page, [
+    "31% 1d 0h 30m",
+    "54% 1d 0h 30m",
+    "7% 1d 0h 30m",
+    "12% 1d 0h 30m",
+  ]);
   // Source logos are decorative SVGs with no accessible role. Their path data distinguishes
   // the source artwork from the fallback gauge.
   const claudePath = /<path[^>]* d="([^"]+)"/.exec(

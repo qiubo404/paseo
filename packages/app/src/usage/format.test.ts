@@ -15,8 +15,8 @@ describe("formatResetCountdown", () => {
   const now = Date.parse("2026-10-21T08:00:00.000Z");
 
   it.each([
-    [3 * 24 * 60 + 8 * 60 + 15, "3d 8h"],
-    [24 * 60, "1d 0h"],
+    [3 * 24 * 60 + 8 * 60 + 15, "3d 8h 15m"],
+    [24 * 60, "1d 0h 0m"],
     [2 * 60 + 15, "2h 15m"],
     [60, "1h 0m"],
     [15, "15m"],
@@ -35,6 +35,30 @@ describe("formatResetCountdown", () => {
   });
 });
 const NOW = Date.parse("2026-07-19T00:00:00.000Z");
+
+describe("minute-precision reset labels", () => {
+  afterEach(async () => {
+    await i18n.changeLanguage("en");
+  });
+
+  it.each([
+    [135, "resets 2h 15m"],
+    [2 * 1440 + 3 * 60 + 7, "resets 2d 3h 7m"],
+    [60, "resets 1h 0m"],
+    [15, "resets 15m"],
+    [0.5, "resets <1m"],
+    [0, "resetting now"],
+  ])("shows a reset %s minutes away as %s", (minutes, expected) => {
+    const resetsAt = new Date(NOW + minutes * 60_000).toISOString();
+    expect(formatResetLabel(resetsAt, false, NOW)).toBe(expected);
+  });
+
+  it("uses the same compact countdown as the sidebar within translated reset copy", async () => {
+    await i18n.changeLanguage("zh-CN");
+    const resetsAt = new Date(NOW + 135 * 60_000).toISOString();
+    expect(formatResetLabel(resetsAt, false, NOW)).toBe("将在 2h 15m后重置");
+  });
+});
 
 describe("formatAmount", () => {
   beforeEach(async () => {
@@ -60,11 +84,11 @@ describe("formatAmount", () => {
     const threeDaysAgo = new Date(NOW - 3 * 24 * 60 * 60 * 1000).toISOString();
 
     expect(formatPct(7, "en")).toBe("7%");
-    expect(formatResetLabel(twoHoursFromNow, false, NOW)).toBe("resets 2h");
+    expect(formatResetLabel(twoHoursFromNow, false, NOW)).toBe("resets 2h 0m");
     expect(formatRunsOutLabel(twoHoursFromNow, NOW)).toBe("runs out 2h");
 
     await i18n.changeLanguage("ja");
-    expect(formatResetLabel(twoHoursFromNow, false, NOW)).toBe("2時間後にリセット");
+    expect(formatResetLabel(twoHoursFromNow, false, NOW)).toBe("2h 0m後にリセット");
     expect(formatRunsOutLabel(twoHoursFromNow, NOW)).toBe("2時間後に上限に到達");
     expect(formatAgo(threeDaysAgo, NOW)).toBe("3日前");
   });
@@ -79,7 +103,7 @@ describe("formatAmount", () => {
     const daysFromNow = new Date(NOW + days * 24 * 60 * 60 * 1000).toISOString();
     const daysAgo = new Date(NOW - days * 24 * 60 * 60 * 1000).toISOString();
 
-    expect(formatResetLabel(daysFromNow, false, NOW)).toBe("se réinitialise dans 1\u202f234 j");
+    expect(formatResetLabel(daysFromNow, false, NOW)).toBe("se réinitialise dans 1234d 0h 0m");
     expect(formatRunsOutLabel(daysFromNow, NOW)).toBe("s’épuise dans 1\u202f234 j");
     expect(formatAgo(daysAgo, NOW)).toBe("il y a 1\u202f234 j");
   });
@@ -90,7 +114,7 @@ describe("formatAmount", () => {
     const threeHoursFromNow = new Date(NOW + 3 * 60 * 60 * 1000).toISOString();
     const twoDaysAgo = new Date(NOW - 2 * 24 * 60 * 60 * 1000).toISOString();
 
-    expect(formatResetLabel(twoHoursFromNow, false, NOW)).toBe("تتم إعادة التعيين خلال ساعتين");
+    expect(formatResetLabel(twoHoursFromNow, false, NOW)).toBe("تتم إعادة التعيين خلال 2h 0m");
     expect(formatRunsOutLabel(threeHoursFromNow, NOW)).toBe("ينفد خلال 3 ساعات");
     expect(formatAgo(twoDaysAgo, NOW)).toBe("قبل يومين");
   });
